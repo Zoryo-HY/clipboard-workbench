@@ -23,6 +23,7 @@ export default function App() {
     total_storage_limit_mb: 500,
     auto_clean_days: 30,
     start_minimized: false,
+    storage_path: "",
   });
 
   // Context menu state

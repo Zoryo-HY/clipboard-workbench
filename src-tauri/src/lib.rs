@@ -10,6 +10,7 @@ use tauri::Manager;
 struct AppState {
     db: Arc<Mutex<rusqlite::Connection>>,
     last_written: Arc<Mutex<(String, Instant)>>,
+    data_dir: std::path::PathBuf,
 }
 
 #[tauri::command]
@@ -86,8 +87,26 @@ fn toggle_favorite(state: tauri::State<AppState>, id: i64) -> Result<bool, Strin
 
 #[tauri::command]
 fn delete_item(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::delete_item(&conn, id).map_err(|e| e.to_string())
+    // Get content before deleting (for file cleanup)
+    let (content_type, content) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let ct = db::get_item_type(&conn, id).map_err(|e| e.to_string())?;
+        let c = db::get_item_content(&conn, id).map_err(|e| e.to_string())?;
+        (ct, c)
+    };
+
+    // Delete from DB
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::delete_item(&conn, id).map_err(|e| e.to_string())?;
+    }
+
+    // If image/file, also delete the file on disk
+    if content_type == "image" || content_type == "file" {
+        let _ = std::fs::remove_file(&content);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -130,6 +149,17 @@ fn open_file_location(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn pick_folder() -> Result<Option<String>, String> {
+    let folder = rfd::FileDialog::new().pick_folder();
+    Ok(folder.map(|p| p.to_string_lossy().to_string()))
+}
+
+#[tauri::command]
+fn get_data_dir(state: tauri::State<AppState>) -> String {
+    state.data_dir.to_string_lossy().to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -149,15 +179,38 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir()?;
-            std::fs::create_dir_all(&app_data_dir)?;
-            let db_path = app_data_dir.join("clipboard.db");
+            let default_data_dir = app.path().app_data_dir()?;
+
+            // Open DB in default location first to read storage_path setting
+            let default_db = default_data_dir.join("clipboard.db");
+            let temp_conn = rusqlite::Connection::open(&default_db)?;
+            db::init(&temp_conn)?;
+            let custom_path = db::get_settings(&temp_conn)
+                .map(|s| s.storage_path)
+                .unwrap_or_default();
+            drop(temp_conn);
+
+            // Determine actual data directory
+            let data_dir = if custom_path.is_empty() {
+                default_data_dir
+            } else {
+                std::path::PathBuf::from(&custom_path)
+            };
+
+            std::fs::create_dir_all(&data_dir)?;
+            let db_path = data_dir.join("clipboard.db");
             let conn = rusqlite::Connection::open(&db_path)?;
             db::init(&conn)?;
 
-            let start_minimized = db::get_settings(&conn)
-                .map(|s| s.start_minimized)
-                .unwrap_or(false);
+            let settings = db::get_settings(&conn).unwrap_or(db::Settings {
+                max_text_length: 10000,
+                max_image_size_mb: 10,
+                max_file_size_mb: 50,
+                total_storage_limit_mb: 500,
+                auto_clean_days: 30,
+                start_minimized: false,
+                storage_path: String::new(),
+            });
 
             let db = Arc::new(Mutex::new(conn));
             let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
@@ -165,9 +218,10 @@ pub fn run() {
             app.manage(AppState {
                 db: db.clone(),
                 last_written: last_written.clone(),
+                data_dir: data_dir.clone(),
             });
 
-            let images_dir = app_data_dir.join("images");
+            let images_dir = data_dir.join("images");
             std::fs::create_dir_all(&images_dir)?;
 
             tray::setup(app)?;
@@ -191,7 +245,7 @@ pub fn run() {
                     }
                 });
 
-                if start_minimized {
+                if settings.start_minimized {
                     let _ = window.hide();
                 }
             }
@@ -210,6 +264,8 @@ pub fn run() {
             update_settings,
             hide_window,
             open_file_location,
+            pick_folder,
+            get_data_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

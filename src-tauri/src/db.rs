@@ -20,6 +20,8 @@ pub struct Settings {
     pub auto_clean_days: i64,
     #[serde(default)]
     pub start_minimized: bool,
+    #[serde(default)]
+    pub storage_path: String,
 }
 
 pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -42,7 +44,8 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
         INSERT OR IGNORE INTO settings (key, value) VALUES ('max_file_size_mb', '50');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('total_storage_limit_mb', '500');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_clean_days', '30');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('start_minimized', 'false');"
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('start_minimized', 'false');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_path', '');"
     )?;
     Ok(())
 }
@@ -182,6 +185,7 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, rusqlite::Error> {
         total_storage_limit_mb: get_val("total_storage_limit_mb", "500").parse().unwrap_or(500),
         auto_clean_days: get_val("auto_clean_days", "30").parse().unwrap_or(30),
         start_minimized: get_val("start_minimized", "false") == "true",
+        storage_path: get_val("storage_path", ""),
     })
 }
 
@@ -199,5 +203,6 @@ pub fn update_settings(conn: &Connection, settings: &Settings) -> Result<(), rus
     set("total_storage_limit_mb", &settings.total_storage_limit_mb.to_string())?;
     set("auto_clean_days", &settings.auto_clean_days.to_string())?;
     set("start_minimized", if settings.start_minimized { "true" } else { "false" })?;
+    set("storage_path", &settings.storage_path)?;
     Ok(())
 }

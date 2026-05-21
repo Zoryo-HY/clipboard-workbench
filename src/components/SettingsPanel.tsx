@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen } from "lucide-react";
 import type { Settings } from "../types";
 
 interface Props {
@@ -19,7 +20,13 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
     settings.auto_clean_days > 0 ? settings.auto_clean_days : 30
   );
   const [startMinimized, setStartMinimized] = useState(settings.start_minimized);
+  const [storagePath, setStoragePath] = useState(settings.storage_path);
+  const [dataDir, setDataDir] = useState("");
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    invoke<string>("get_data_dir").then(setDataDir).catch(() => {});
+  }, []);
 
   const handleSave = () => {
     onSave({
@@ -29,6 +36,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       total_storage_limit_mb: storage,
       auto_clean_days: autoClean ? cleanDays : 0,
       start_minimized: startMinimized,
+      storage_path: storagePath,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
@@ -60,6 +68,42 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
           <SliderRow label="文件大小限制" value={maxFile} min={1} max={200} step={5} unit="MB" onChange={setMaxFile} />
           <div className="mt-2 pt-3 border-t border-white/[0.04]">
             <SliderRow label="总存储空间" value={storage} min={50} max={2000} step={50} unit="MB" onChange={setStorage} />
+          </div>
+        </Section>
+
+        {/* Storage location */}
+        <Section icon={FolderOpen} title="存储位置">
+          <div className="space-y-2">
+            <label className="text-sm text-zinc-400">当前路径</label>
+            <p className="text-xs text-zinc-500 break-all bg-[#0d0f13] px-3 py-2 rounded-md
+              border border-white/[0.04] font-mono">
+              {dataDir || "（默认）"}
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={storagePath}
+                onChange={(e) => setStoragePath(e.target.value)}
+                placeholder="留空使用默认位置"
+                className="flex-1 h-8 px-2.5 bg-white/[0.03] border border-white/[0.04]
+                  rounded-md text-sm text-zinc-300 placeholder:text-zinc-600
+                  outline-none focus:border-violet-500/20"
+              />
+              <button
+                onClick={async () => {
+                  const folder = await invoke<string | null>("pick_folder");
+                  if (folder) setStoragePath(folder);
+                }}
+                className="shrink-0 px-3 h-8 rounded-md text-sm font-medium
+                  text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]
+                  border border-white/[0.04] transition-colors"
+              >
+                浏览
+              </button>
+            </div>
+            <p className="text-xs text-zinc-600">
+              修改后需重启应用生效。数据会保留在原位置，需手动迁移。
+            </p>
           </div>
         </Section>
 
