@@ -223,6 +223,7 @@ pub fn start_monitoring(
                                 thumbnail: None,
                                 size: total_size,
                                 is_favorite: false,
+                                is_cleared: false,
                                 created_at: chrono::Utc::now().to_rfc3339(),
                             },
                         });
@@ -315,6 +316,7 @@ pub fn start_monitoring(
                             thumbnail: thumb_b64,
                             size,
                             is_favorite: false,
+                            is_cleared: false,
                             created_at: chrono::Utc::now().to_rfc3339(),
                         },
                     });
@@ -364,6 +366,7 @@ pub fn start_monitoring(
                                     thumbnail: None,
                                     size,
                                     is_favorite: false,
+                                    is_cleared: false,
                                     created_at: chrono::Utc::now().to_rfc3339(),
                                 },
                             });

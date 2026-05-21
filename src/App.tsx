@@ -8,6 +8,7 @@ import { FloatingPanel } from "./components/FloatingPanel";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ContextMenu, MenuAction } from "./components/ContextMenu";
+import { TextViewer } from "./components/TextViewer";
 import type { ClipboardItem, ClipboardEventPayload, Settings, CategoryId, View } from "./types";
 
 export default function App() {
@@ -16,6 +17,7 @@ export default function App() {
   const [category, setCategory] = useState<CategoryId>("all");
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
   const [fullContent, setFullContent] = useState<string>("");
+  const [viewingText, setViewingText] = useState<ClipboardItem | null>(null);
   const [settings, setSettings] = useState<Settings>({
     max_text_length: 10000,
     max_image_size_mb: 10,
@@ -259,11 +261,12 @@ export default function App() {
             onClearOld={handleClearOld}
             onClearImages={handleClearImages}
             onOpenImage={(path) => invoke("open_image", { path })}
+            onDoubleClickText={(item) => setViewingText(item)}
           />
         </div>
 
         {/* Right — workspace */}
-        <div className="w-[280px] shrink-0">
+        <div className="w-[380px] shrink-0">
           <DetailPanel
             item={selectedItem}
             fullContent={fullContent}
@@ -277,6 +280,13 @@ export default function App() {
           />
         </div>
       </div>
+
+      {/* Text viewer modal */}
+      <AnimatePresence>
+        {viewingText && (
+          <TextViewer item={viewingText} onClose={() => setViewingText(null)} />
+        )}
+      </AnimatePresence>
 
       {/* Context menu overlay */}
       {ctxMenu && (

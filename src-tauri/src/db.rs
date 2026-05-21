@@ -10,7 +10,14 @@ pub struct ClipboardItem {
     pub thumbnail: Option<String>,
     pub size: i64,
     pub is_favorite: bool,
+    pub is_cleared: bool,
     pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ShortcutConfig {
+    pub modifiers: String,
+    pub key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -48,10 +55,14 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
         INSERT OR IGNORE INTO settings (key, value) VALUES ('total_storage_limit_mb', '500');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_clean_days', '30');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('start_minimized', 'false');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_path', '');"
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_path', '');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_modifiers', 'Control');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_key', 'Space');"
     )?;
     // Migration: add thumbnail column for existing databases
     let _ = conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN thumbnail TEXT;");
+    // Migration: add is_cleared column
+    let _ = conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN is_cleared INTEGER DEFAULT 0;");
     Ok(())
 }
 
@@ -60,15 +71,22 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
 /// the previous record if one was replaced (for cleanup + frontend sync).
 pub fn insert_item(conn: &Connection, content_type: &str, content: &str, hash: &str, size: i64, thumbnail: Option<&str>) -> Result<(i64, Option<i64>, Option<String>), rusqlite::Error> {
     let old = conn.query_row(
-        "SELECT id, content FROM clipboard_items WHERE content_hash = ?1",
+        "SELECT id, content, is_cleared FROM clipboard_items WHERE content_hash = ?1",
         params![hash],
-        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0)),
     ).ok();
 
+    // If old item was cleared, re-insert as cleared (no thumbnail/preview)
+    let (effective_thumb, effective_cleared) = if old.as_ref().map(|o| o.2).unwrap_or(false) {
+        (None, true)
+    } else {
+        (thumbnail, false)
+    };
+
     conn.execute(
-        "INSERT OR REPLACE INTO clipboard_items (content_type, content, content_hash, thumbnail, size, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![content_type, content, hash, thumbnail, size, chrono::Utc::now().to_rfc3339()],
+        "INSERT OR REPLACE INTO clipboard_items (content_type, content, content_hash, thumbnail, size, is_cleared, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![content_type, content, hash, effective_thumb, size, effective_cleared as i64, chrono::Utc::now().to_rfc3339()],
     )?;
 
     let new_id = conn.last_insert_rowid();
@@ -77,7 +95,7 @@ pub fn insert_item(conn: &Connection, content_type: &str, content: &str, hash: &
 
 pub fn get_history(conn: &Connection, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT id, content_type, content, thumbnail, size, is_favorite, created_at
+        "SELECT id, content_type, content, thumbnail, size, is_favorite, is_cleared, created_at
          FROM clipboard_items ORDER BY id DESC LIMIT ?1 OFFSET ?2"
     )?;
     let items = stmt.query_map(params![limit, offset], |row| {
@@ -88,7 +106,8 @@ pub fn get_history(conn: &Connection, limit: u32, offset: u32) -> Result<Vec<Cli
             thumbnail: row.get(3)?,
             size: row.get(4)?,
             is_favorite: row.get::<_, i64>(5)? != 0,
-            created_at: row.get(6)?,
+            is_cleared: row.get::<_, i64>(6)? != 0,
+            created_at: row.get(7)?,
         })
     })?.collect::<Result<Vec<_>, _>>()?;
     Ok(items)
@@ -110,6 +129,25 @@ pub fn get_item_type(conn: &Connection, id: i64) -> Result<String, rusqlite::Err
     )
 }
 
+pub fn get_item_by_id(conn: &Connection, id: i64) -> Result<ClipboardItem, rusqlite::Error> {
+    conn.query_row(
+        "SELECT id, content_type, content, thumbnail, size, is_favorite, is_cleared, created_at FROM clipboard_items WHERE id = ?1",
+        params![id],
+        |row| {
+            Ok(ClipboardItem {
+                id: row.get(0)?,
+                content_type: row.get(1)?,
+                content: row.get(2)?,
+                thumbnail: row.get(3)?,
+                size: row.get(4)?,
+                is_favorite: row.get::<_, i64>(5)? != 0,
+                is_cleared: row.get::<_, i64>(6)? != 0,
+                created_at: row.get(7)?,
+            })
+        },
+    )
+}
+
 pub fn toggle_favorite(conn: &Connection, id: i64) -> Result<bool, rusqlite::Error> {
     conn.execute(
         "UPDATE clipboard_items SET is_favorite = CASE WHEN is_favorite = 0 THEN 1 ELSE 0 END WHERE id = ?1",
@@ -125,6 +163,56 @@ pub fn toggle_favorite(conn: &Connection, id: i64) -> Result<bool, rusqlite::Err
 
 pub fn delete_item(conn: &Connection, id: i64) -> Result<(), rusqlite::Error> {
     conn.execute("DELETE FROM clipboard_items WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+/// Soft-clear: delete cached image file, mark is_cleared=1, clear thumbnail.
+/// Returns the content (file path) if it was an image (for file deletion).
+pub fn clear_item(conn: &Connection, id: i64) -> Result<Option<String>, rusqlite::Error> {
+    let content_type: String = conn.query_row(
+        "SELECT content_type FROM clipboard_items WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    )?;
+    let content: String = conn.query_row(
+        "SELECT content FROM clipboard_items WHERE id = ?1",
+        params![id],
+        |row| row.get(0),
+    )?;
+    conn.execute(
+        "UPDATE clipboard_items SET is_cleared = 1, thumbnail = NULL WHERE id = ?1",
+        params![id],
+    )?;
+    if content_type == "image" {
+        Ok(Some(content))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn get_shortcut_config(conn: &Connection) -> Result<ShortcutConfig, rusqlite::Error> {
+    let get_val = |key: &str, default: &str| -> String {
+        conn.query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        ).unwrap_or_else(|_| default.to_string())
+    };
+    Ok(ShortcutConfig {
+        modifiers: get_val("shortcut_modifiers", "Control"),
+        key: get_val("shortcut_key", "Space"),
+    })
+}
+
+pub fn update_shortcut_config(conn: &Connection, config: &ShortcutConfig) -> Result<(), rusqlite::Error> {
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('shortcut_modifiers', ?1)",
+        params![config.modifiers],
+    )?;
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('shortcut_key', ?1)",
+        params![config.key],
+    )?;
     Ok(())
 }
 

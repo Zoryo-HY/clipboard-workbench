@@ -5,12 +5,14 @@ mod tray;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use sha2::{Sha256, Digest};
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
-struct AppState {
+pub struct AppState {
     db: Arc<Mutex<rusqlite::Connection>>,
     last_written: Arc<Mutex<(String, Instant)>>,
     data_dir: std::path::PathBuf,
+    default_data_dir: std::path::PathBuf,
+    last_active_label: Arc<Mutex<String>>,
 }
 
 #[tauri::command]
@@ -125,13 +127,40 @@ fn clear_history(state: tauri::State<AppState>) -> Result<(), String> {
 #[tauri::command]
 fn get_settings(state: tauri::State<AppState>) -> Result<db::Settings, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::get_settings(&conn).map_err(|e| e.to_string())
+    let mut settings = db::get_settings(&conn).map_err(|e| e.to_string())?;
+
+    // Always overlay storage_path from config file (authoritative source)
+    let config_path = state.default_data_dir.join("storage_path.txt");
+    if config_path.exists() {
+        if let Ok(s) = std::fs::read_to_string(&config_path) {
+            let trimmed = s.trim().to_string();
+            if !trimmed.is_empty() {
+                settings.storage_path = trimmed;
+            }
+        }
+    }
+    Ok(settings)
 }
 
 #[tauri::command]
 fn update_settings(state: tauri::State<AppState>, settings: db::Settings) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::update_settings(&conn, &settings).map_err(|e| e.to_string())
+    db::update_settings(&conn, &settings).map_err(|e| e.to_string())?;
+
+    // Persist storage_path to plain-text file at default location.
+    let config_path = state.default_data_dir.join("storage_path.txt");
+    let log_path = state.default_data_dir.join("debug.log");
+    let log_msg = format!(
+        "update_settings called: storage_path='{}', config_path='{}', default_data_dir='{}'\n",
+        settings.storage_path,
+        config_path.display(),
+        state.default_data_dir.display(),
+    );
+    let _ = std::fs::write(&log_path, &log_msg);
+    if let Err(e) = std::fs::write(&config_path, settings.storage_path.trim()) {
+        let _ = std::fs::write(&log_path, format!("{}ERROR: {}\n", log_msg, e));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -199,6 +228,172 @@ fn get_data_dir(state: tauri::State<AppState>) -> String {
     state.data_dir.to_string_lossy().to_string()
 }
 
+#[tauri::command]
+fn open_data_dir(state: tauri::State<AppState>) -> Result<(), String> {
+    let path = state.data_dir.to_string_lossy().to_string();
+    std::process::Command::new("explorer")
+        .arg(&path)
+        .spawn()
+        .map_err(|e| format!("无法打开文件夹: {}", e))?;
+    Ok(())
+}
+
+// ── Window switching ──
+
+fn update_active_label(state: &AppState, label: &str) {
+    if let Ok(mut l) = state.last_active_label.lock() {
+        *l = label.to_string();
+    }
+}
+
+#[tauri::command]
+fn switch_to_mini(state: tauri::State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
+    update_active_label(&state, "mini");
+    if let Some(w) = app.get_webview_window("main") { let _ = w.hide(); }
+    if let Some(w) = app.get_webview_window("mini") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    eprintln!("[switch] → mini window");
+    Ok(())
+}
+
+#[tauri::command]
+fn switch_to_main(state: tauri::State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
+    update_active_label(&state, "main");
+    if let Some(w) = app.get_webview_window("mini") { let _ = w.hide(); }
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    eprintln!("[switch] → main window");
+    Ok(())
+}
+
+#[tauri::command]
+fn toggle_active_window(state: tauri::State<AppState>, app: tauri::AppHandle) -> Result<(), String> {
+    let label = state.last_active_label.lock().map_err(|e| e.to_string())?.clone();
+    let label = if label.is_empty() { "main".to_string() } else { label };
+    if let Some(w) = app.get_webview_window(&label) {
+        if w.is_visible().unwrap_or(false) {
+            let _ = w.hide();
+            eprintln!("[toggle] hide {}", label);
+        } else {
+            let _ = w.show();
+            let _ = w.set_focus();
+            eprintln!("[toggle] show {}", label);
+        }
+    }
+    Ok(())
+}
+
+// ── Clear item (mini window soft-delete) ──
+
+#[tauri::command]
+fn clear_item(state: tauri::State<AppState>, app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let deleted_file = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::clear_item(&conn, id).map_err(|e| e.to_string())?
+    };
+    if let Some(path) = deleted_file {
+        let _ = std::fs::remove_file(&path);
+        eprintln!("[clear_item] deleted cached file: {}", path);
+    }
+    let item = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_item_by_id(&conn, id).map_err(|e| e.to_string())?
+    };
+    let _ = app.emit("item-cleared", item);
+    eprintln!("[clear_item] id={} cleared", id);
+    Ok(())
+}
+
+// ── Screenshot: invoke Windows native snipping tool ──
+
+#[tauri::command]
+fn take_screenshot() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "ms-screenclip:"])
+            .spawn()
+            .map_err(|e| format!("{}", e))?;
+        eprintln!("[screenshot] launched ms-screenclip:");
+    }
+    #[cfg(not(windows))]
+    { let _ = (); }
+    Ok(())
+}
+
+// ── Shortcut config ──
+
+#[tauri::command]
+fn get_shortcut_config(state: tauri::State<AppState>) -> Result<db::ShortcutConfig, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::get_shortcut_config(&conn).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn update_shortcut(state: tauri::State<AppState>, app: tauri::AppHandle, modifiers: String, key: String) -> Result<(), String> {
+    let config = db::ShortcutConfig { modifiers: modifiers.clone(), key: key.clone() };
+    {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::update_shortcut_config(&conn, &config).map_err(|e| e.to_string())?;
+    }
+    // Re-register shortcut
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+    let mods = parse_modifiers(&modifiers);
+    let code = parse_key_code(&key);
+    if let (Some(m), Some(c)) = (mods, code) {
+        let shortcut = Shortcut::new(Some(m), c);
+        app.global_shortcut().unregister_all().map_err(|e| format!("{}", e))?;
+        app.global_shortcut().register(shortcut).map_err(|e| format!("{}", e))?;
+        eprintln!("[shortcut] re-registered: {:?}+{:?}", modifiers, key);
+    }
+    Ok(())
+}
+
+fn parse_modifiers(s: &str) -> Option<tauri_plugin_global_shortcut::Modifiers> {
+    use tauri_plugin_global_shortcut::Modifiers;
+    match s.to_lowercase().as_str() {
+        "control" => Some(Modifiers::CONTROL),
+        "alt" => Some(Modifiers::ALT),
+        "super" | "meta" => Some(Modifiers::SUPER),
+        "shift" => Some(Modifiers::SHIFT),
+        "control+shift" => Some(Modifiers::CONTROL.union(Modifiers::SHIFT)),
+        "control+alt" => Some(Modifiers::CONTROL.union(Modifiers::ALT)),
+        "alt+shift" => Some(Modifiers::ALT.union(Modifiers::SHIFT)),
+        _ => None,
+    }
+}
+
+fn parse_key_code(s: &str) -> Option<tauri_plugin_global_shortcut::Code> {
+    use tauri_plugin_global_shortcut::Code;
+    match s.to_lowercase().as_str() {
+        "space" => Some(Code::Space),
+        "a" => Some(Code::KeyA), "b" => Some(Code::KeyB), "c" => Some(Code::KeyC),
+        "d" => Some(Code::KeyD), "e" => Some(Code::KeyE), "f" => Some(Code::KeyF),
+        "g" => Some(Code::KeyG), "h" => Some(Code::KeyH), "i" => Some(Code::KeyI),
+        "j" => Some(Code::KeyJ), "k" => Some(Code::KeyK), "l" => Some(Code::KeyL),
+        "m" => Some(Code::KeyM), "n" => Some(Code::KeyN), "o" => Some(Code::KeyO),
+        "p" => Some(Code::KeyP), "q" => Some(Code::KeyQ), "r" => Some(Code::KeyR),
+        "s" => Some(Code::KeyS), "t" => Some(Code::KeyT), "u" => Some(Code::KeyU),
+        "v" => Some(Code::KeyV), "w" => Some(Code::KeyW), "x" => Some(Code::KeyX),
+        "y" => Some(Code::KeyY), "z" => Some(Code::KeyZ),
+        "0" => Some(Code::Digit0), "1" => Some(Code::Digit1), "2" => Some(Code::Digit2),
+        "3" => Some(Code::Digit3), "4" => Some(Code::Digit4), "5" => Some(Code::Digit5),
+        "6" => Some(Code::Digit6), "7" => Some(Code::Digit7), "8" => Some(Code::Digit8),
+        "9" => Some(Code::Digit9),
+        "f1" => Some(Code::F1), "f2" => Some(Code::F2), "f3" => Some(Code::F3),
+        "f4" => Some(Code::F4), "f5" => Some(Code::F5), "f6" => Some(Code::F6),
+        "f7" => Some(Code::F7), "f8" => Some(Code::F8), "f9" => Some(Code::F9),
+        "f10" => Some(Code::F10), "f11" => Some(Code::F11), "f12" => Some(Code::F12),
+        "escape" => Some(Code::Escape), "enter" => Some(Code::Enter),
+        "tab" => Some(Code::Tab), "backspace" => Some(Code::Backspace),
+        _ => None,
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -207,7 +402,12 @@ pub fn run() {
                 .with_handler(|app, _shortcut, event| {
                     use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state == ShortcutState::Pressed {
-                        if let Some(w) = app.get_webview_window("main") {
+                        let state = app.state::<AppState>();
+                        let label = state.last_active_label.lock()
+                            .map(|l| l.clone())
+                            .unwrap_or_else(|_| "main".to_string());
+                        let label = if label.is_empty() { "main".to_string() } else { label };
+                        if let Some(w) = app.get_webview_window(&label) {
                             match w.is_visible() {
                                 Ok(true) => { let _ = w.hide(); }
                                 _ => { let _ = w.show(); let _ = w.set_focus(); }
@@ -219,35 +419,49 @@ pub fn run() {
         )
         .setup(|app| {
             let default_data_dir = app.path().app_data_dir()?;
+            eprintln!("[setup] default_data_dir={}", default_data_dir.display());
+            std::fs::create_dir_all(&default_data_dir)?;
 
-            // Open DB in default location first to read storage_path setting
-            let default_db = default_data_dir.join("clipboard.db");
-            let temp_conn = rusqlite::Connection::open(&default_db)?;
-            db::init(&temp_conn)?;
-            let custom_path = db::get_settings(&temp_conn)
-                .map(|s| s.storage_path)
+            // Read storage_path from plain-text config at DEFAULT location.
+            // Must live outside the DB since the DB path depends on this setting.
+            let config_path = default_data_dir.join("storage_path.txt");
+            let custom_path = std::fs::read_to_string(&config_path)
+                .map(|s| s.trim().to_string())
                 .unwrap_or_default();
-            drop(temp_conn);
+            eprintln!("[setup] config_path={}, custom_path='{}'", config_path.display(), custom_path);
 
             // Determine actual data directory
             let data_dir = if custom_path.is_empty() {
-                default_data_dir
+                default_data_dir.clone()
             } else {
                 std::path::PathBuf::from(&custom_path)
             };
+
+            eprintln!("[setup] data_dir={}", data_dir.display());
 
             std::fs::create_dir_all(&data_dir)?;
             let db_path = data_dir.join("clipboard.db");
             let conn = rusqlite::Connection::open(&db_path)?;
             db::init(&conn)?;
 
+            // Sync storage_path from config file into the DB so get_settings returns it
+            if !custom_path.is_empty() {
+                let _ = conn.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES ('storage_path', ?1)",
+                    rusqlite::params![&custom_path],
+                );
+            }
+
             let db = Arc::new(Mutex::new(conn));
             let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
+            let last_active_label = Arc::new(Mutex::new("main".to_string()));
 
             app.manage(AppState {
                 db: db.clone(),
                 last_written: last_written.clone(),
                 data_dir: data_dir.clone(),
+                default_data_dir: default_data_dir.clone(),
+                last_active_label: last_active_label.clone(),
             });
 
             let images_dir = data_dir.join("images");
@@ -256,24 +470,52 @@ pub fn run() {
             tray::setup(app)?;
 
             let handle = app.handle().clone();
-            clipboard::start_monitoring(db, handle, images_dir, last_written);
+            clipboard::start_monitoring(db.clone(), handle, images_dir, last_written);
 
-            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, Modifiers, Code};
-            let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
-            app.global_shortcut().register(shortcut)
-                .map_err(|e| format!("{}", e))?;
+            use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+            let sc = {
+                let db_lock = db.lock().map_err(|e| format!("{}", e))?;
+                db::get_shortcut_config(&db_lock).unwrap_or(db::ShortcutConfig {
+                    modifiers: "Control".to_string(),
+                    key: "Space".to_string(),
+                })
+            };
+            let mods = parse_modifiers(&sc.modifiers);
+            let code = parse_key_code(&sc.key);
+            if let (Some(m), Some(c)) = (mods, code) {
+                let shortcut = Shortcut::new(Some(m), c);
+                app.global_shortcut().register(shortcut)
+                    .map_err(|e| format!("{}", e))?;
+                eprintln!("[startup] shortcut: {:?}+{:?}", sc.modifiers, sc.key);
+            }
 
             if let Some(window) = app.get_webview_window("main") {
-                // Ensure window is visible on startup
                 let _ = window.show();
                 let _ = window.set_focus();
 
                 let handle = app.handle().clone();
+                let label_ref = last_active_label.clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        if let Some(w) = handle.get_webview_window("main") {
-                            let _ = w.hide();
+                    match event {
+                        tauri::WindowEvent::CloseRequested { api, .. } => {
+                            api.prevent_close();
+                            if let Some(w) = handle.get_webview_window("main") { let _ = w.hide(); }
+                            if let Ok(mut l) = label_ref.lock() { *l = "main".to_string(); }
+                        }
+                        tauri::WindowEvent::Focused(focused) if *focused => {
+                            if let Ok(mut l) = label_ref.lock() { *l = "main".to_string(); }
+                        }
+                        _ => {}
+                    }
+                });
+            }
+
+            if let Some(window) = app.get_webview_window("mini") {
+                let label_ref = last_active_label.clone();
+                window.on_window_event(move |event| {
+                    if let tauri::WindowEvent::Focused(focused) = event {
+                        if *focused {
+                            if let Ok(mut l) = label_ref.lock() { *l = "mini".to_string(); }
                         }
                     }
                 });
@@ -299,6 +541,14 @@ pub fn run() {
             open_image,
             pick_folder,
             get_data_dir,
+            open_data_dir,
+            switch_to_mini,
+            switch_to_main,
+            toggle_active_window,
+            clear_item,
+            take_screenshot,
+            get_shortcut_config,
+            update_shortcut,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

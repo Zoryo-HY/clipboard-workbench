@@ -1,5 +1,5 @@
 use tauri::{
-    tray::TrayIconBuilder,
+    tray::{TrayIconBuilder, MouseButton, TrayIconEvent},
     menu::{MenuBuilder, MenuItemBuilder},
     image::Image,
     App, Manager, Emitter,
@@ -7,8 +7,8 @@ use tauri::{
 
 pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id("show", "Show / Hide").build(app)?;
-    let settings = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+    let settings = MenuItemBuilder::with_id("settings", "设置").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "退出").build(app)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show)
@@ -19,15 +19,22 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 
     let icon = tray_icon();
 
-    let _handle = app.handle().clone();
     let _tray = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
-        .tooltip("Clipboard Workbench")
-        .on_menu_event(move |app, event| {
+        .tooltip("Clipboard Workbench — 双击切换窗口")
+        .on_menu_event(|app, event| {
             match event.id().as_ref() {
                 "show" => {
-                    if let Some(w) = app.get_webview_window("main") {
+                    // Toggle last active window
+                    let label = {
+                        let state = app.state::<crate::AppState>();
+                        state.last_active_label.lock()
+                            .map(|l| l.clone())
+                            .unwrap_or_else(|_| "main".to_string())
+                    };
+                    let label = if label.is_empty() { "main" } else { &label };
+                    if let Some(w) = app.get_webview_window(label) {
                         if w.is_visible().unwrap_or(false) {
                             let _ = w.hide();
                         } else {
@@ -47,6 +54,27 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
                     app.exit(0);
                 }
                 _ => {}
+            }
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } = event {
+                let app = tray.app_handle();
+                let label = {
+                    let state = app.state::<crate::AppState>();
+                    state.last_active_label.lock()
+                        .map(|l| l.clone())
+                        .unwrap_or_else(|_| "main".to_string())
+                };
+                let label = if label.is_empty() { "main" } else { &label };
+                eprintln!("[tray] double-click → toggle '{}'", label);
+                if let Some(w) = app.get_webview_window(label) {
+                    if w.is_visible().unwrap_or(false) {
+                        let _ = w.hide();
+                    } else {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                }
             }
         })
         .build(app)?;

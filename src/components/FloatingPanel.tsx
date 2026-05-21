@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { SearchBar } from "./SearchBar";
 import { HistoryItem } from "./HistoryItem";
-import { Trash2, Filter } from "lucide-react";
+import { Trash2, Filter, Camera } from "lucide-react";
 import type { ClipboardItem, CategoryId } from "../types";
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
   onClearOld: (days: number) => void;
   onClearImages: () => void;
   onOpenImage: (path: string) => void;
+  onDoubleClickText: (item: ClipboardItem) => void;
 }
 
 function classifyItem(item: ClipboardItem): CategoryId {
@@ -35,7 +37,7 @@ const categoryLabels: Record<CategoryId, string> = {
 export function FloatingPanel({
   items, category, selectedId, onSelect, onContextMenu,
   onToggleFavorite, onDelete, onClearAll, onClearOld, onClearImages,
-  onOpenImage,
+  onOpenImage, onDoubleClickText,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showMenu, setShowMenu] = useState(false);
@@ -68,6 +70,19 @@ export function FloatingPanel({
           </h2>
           <div className="flex items-center gap-1">
             <span className="text-xs text-zinc-500 tabular-nums mr-1">{filtered.length} 条</span>
+            {/* Screenshot — core action */}
+            <button
+              onClick={async () => {
+                try { await invoke("take_screenshot"); } catch (e) { console.error(e); }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-semibold
+                text-violet-400 hover:text-violet-200 hover:bg-violet-500/15
+                border border-violet-500/20 transition-colors"
+              title="截图"
+            >
+              <Camera className="w-4 h-4" />
+              <span>截图</span>
+            </button>
             {/* Red clear-all button */}
             <button
               onClick={() => { if (window.confirm('确定要清空所有历史记录吗？此操作不可撤销。')) onClearAll(); }}
@@ -161,6 +176,7 @@ export function FloatingPanel({
                     onOpenImage(item.content);
                   }
                 }}
+                onDoubleClickText={() => onDoubleClickText(item)}
               />
             ))}
           </div>

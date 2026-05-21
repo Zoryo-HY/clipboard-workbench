@@ -7,6 +7,7 @@ export interface ClipboardItem {
   thumbnail?: string;
   size: number;
   is_favorite: boolean;
+  is_cleared: boolean;
   created_at: string;
 }
 

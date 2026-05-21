@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Minus, Square, Copy, X } from 'lucide-react';
+import { Minus, Square, Copy, X, PanelRight } from 'lucide-react';
 
 export const Titlebar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
@@ -59,6 +59,17 @@ export const Titlebar: React.FC = () => {
           Clipboard Workbench
         </span>
       </div>
+
+      {/* Mini window switch */}
+      <button
+        onClick={() => invoke('switch_to_mini')}
+        style={btnBase}
+        title="切换到小窗口"
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.color = '#a78bfa'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
+      >
+        <PanelRight size={14} />
+      </button>
 
       {/* Window controls — using invoke for reliability */}
       <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingRight: 4 }}>

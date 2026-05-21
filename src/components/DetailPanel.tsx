@@ -89,13 +89,13 @@ export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDel
 
         {/* Image preview */}
         {item.content_type === "image" && (
-          <div className="shrink-0 px-4 pb-3">
+          <div className="shrink-0 px-4 pb-2">
             {item.thumbnail ? (
               <div className="rounded-lg overflow-hidden border border-white/[0.04] bg-[#0d0f13] relative group">
                 <img
                   src={`data:image/png;base64,${item.thumbnail}`}
                   alt="clipboard"
-                  className="w-full max-h-48 object-contain cursor-pointer"
+                  className="w-full max-h-64 object-contain cursor-pointer"
                   onDoubleClick={() => invoke("open_image", { path: fullContent || item.content })}
                 />
                 <div className="absolute bottom-2 right-2 text-[10px] text-zinc-500 bg-black/60 px-1.5 py-0.5 rounded
@@ -132,7 +132,7 @@ export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDel
           ) : (
             <div className="p-3 rounded-lg bg-[#0d0f13] border border-white/[0.04]">
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words
-                max-h-48 overflow-y-auto custom-scrollbar font-medium">
+                flex-1 overflow-y-auto custom-scrollbar font-medium">
                 {fullContent || item.content}
               </p>
             </div>

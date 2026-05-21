@@ -11,6 +11,7 @@ interface Props {
   onToggleFavorite: () => void;
   onDelete: () => void;
   onDoubleClickImage?: () => void;
+  onDoubleClickText?: () => void;
 }
 
 const typeConfig: Record<string, { icon: typeof FileText; label: string; accent: string }> = {
@@ -51,7 +52,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)} 天前`;
 }
 
-export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggleFavorite, onDelete, onDoubleClickImage }: Props) {
+export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggleFavorite, onDelete, onDoubleClickImage, onDoubleClickText }: Props) {
   const [hovered, setHovered] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const config = typeConfig[item.content_type] || typeConfig.text;
@@ -141,6 +142,11 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
       exit={{ opacity: 0, height: 0, marginBottom: 0 }}
       transition={{ duration: 0.12 }}
       onClick={onClick}
+      onDoubleClick={() => {
+        if (item.content_type !== "image") {
+          onDoubleClickText?.();
+        }
+      }}
       onContextMenu={onContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}

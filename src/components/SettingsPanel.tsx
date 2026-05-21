@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen } from "lucide-react";
+import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen, Pencil, Save } from "lucide-react";
+import { ShortcutCapture } from "./ShortcutCapture";
 import type { Settings } from "../types";
 
 interface Props {
@@ -23,12 +24,30 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
   const [storagePath, setStoragePath] = useState(settings.storage_path);
   const [dataDir, setDataDir] = useState("");
   const [saved, setSaved] = useState(false);
+  const [shortcutMod, setShortcutMod] = useState("Control");
+  const [shortcutKey, setShortcutKey] = useState("Space");
+  const [captureOpen, setCaptureOpen] = useState(false);
+
+  const dirty = useMemo(() => {
+    return maxText !== settings.max_text_length
+      || maxImg !== settings.max_image_size_mb
+      || maxFile !== settings.max_file_size_mb
+      || storage !== settings.total_storage_limit_mb
+      || autoClean !== (settings.auto_clean_days > 0)
+      || (autoClean && cleanDays !== (settings.auto_clean_days > 0 ? settings.auto_clean_days : 30))
+      || startMinimized !== settings.start_minimized
+      || storagePath !== settings.storage_path
+      || shortcutMod !== "Control" || shortcutKey !== "Space";
+  }, [maxText, maxImg, maxFile, storage, autoClean, cleanDays, startMinimized, storagePath, shortcutMod, shortcutKey, settings]);
 
   useEffect(() => {
     invoke<string>("get_data_dir").then(setDataDir).catch(() => {});
+    invoke<{ modifiers: string; key: string }>("get_shortcut_config")
+      .then((sc) => { setShortcutMod(sc.modifiers); setShortcutKey(sc.key); })
+      .catch(() => {});
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     onSave({
       max_text_length: maxText,
       max_image_size_mb: maxImg,
@@ -38,8 +57,22 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       start_minimized: startMinimized,
       storage_path: storagePath,
     });
+    try {
+      await invoke("update_shortcut", { modifiers: shortcutMod, key: shortcutKey });
+    } catch (e) {
+      console.error("Failed to update shortcut:", e);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+  };
+
+  const handleBack = () => {
+    if (dirty) {
+      if (window.confirm("有未保存的更改，是否保存后再离开？")) {
+        handleSave();
+      }
+    }
+    onBack();
   };
 
   return (
@@ -51,13 +84,24 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
     >
       <div className="shrink-0 px-4 pt-3 pb-2 flex items-center gap-3">
         <button
-          onClick={onBack}
+          onClick={handleBack}
           className="p-1 -ml-1 rounded-md text-zinc-400 hover:text-zinc-200
             hover:bg-white/[0.04] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="text-base font-semibold text-zinc-200">设置</h1>
+        <h1 className="text-base font-semibold text-zinc-200 flex-1">设置</h1>
+        {dirty && (
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium
+              text-violet-300 bg-violet-500/15 border border-violet-500/20
+              hover:bg-violet-500/20 transition-colors"
+          >
+            <Save className="w-3.5 h-3.5" />
+            保存
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar px-4 space-y-4 pb-4">
@@ -74,7 +118,18 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         {/* Storage location */}
         <Section icon={FolderOpen} title="存储位置">
           <div className="space-y-2">
-            <label className="text-sm text-zinc-400">当前路径</label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-zinc-400">当前路径</label>
+              <button
+                onClick={() => invoke("open_data_dir").catch(console.error)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs
+                  text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]
+                  border border-white/[0.04] transition-colors"
+                title="在资源管理器中打开"
+              >
+                打开文件夹
+              </button>
+            </div>
             <p className="text-xs text-zinc-500 break-all bg-[#0d0f13] px-3 py-2 rounded-md
               border border-white/[0.04] font-mono">
               {dataDir || "（默认）"}
@@ -125,17 +180,47 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         {/* Shortcut */}
         <Section icon={Keyboard} title="快捷键">
           <div className="space-y-2">
-            <label className="text-sm text-zinc-400">呼出窗口</label>
-            <div className="flex items-center gap-1.5">
-              <kbd className="px-2.5 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]
-                text-sm text-zinc-300 font-mono font-medium">Ctrl</kbd>
-              <span className="text-zinc-500 text-sm">+</span>
-              <kbd className="px-2.5 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]
-                text-sm text-zinc-300 font-mono font-medium">Space</kbd>
+            <label className="text-sm text-zinc-400">呼出/收起窗口</label>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
+                {shortcutMod.split("+").map((m) => (
+                  <kbd key={m} className="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]
+                    text-sm text-zinc-300 font-mono font-medium">
+                    {m === "Control" ? "Ctrl" : m === "Super" ? "Win" : m}
+                  </kbd>
+                ))}
+                <span className="text-zinc-500 text-sm">+</span>
+                <kbd className="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]
+                  text-sm text-zinc-300 font-mono font-medium">
+                  {shortcutKey}
+                </kbd>
+              </div>
+              <button
+                onClick={() => setCaptureOpen(true)}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
+                  text-violet-400 hover:text-violet-300 hover:bg-violet-500/10
+                  border border-violet-500/15 transition-colors"
+              >
+                <Pencil className="w-3 h-3" />
+                修改
+              </button>
             </div>
-            <p className="text-xs text-zinc-600">自定义快捷键即将推出</p>
+            <p className="text-xs text-zinc-600">点击"修改"，然后按下组合键自动捕获并保存</p>
           </div>
         </Section>
+
+        <ShortcutCapture
+          open={captureOpen}
+          currentMod={shortcutMod}
+          currentKey={shortcutKey}
+          onSave={(mods, key) => {
+            setShortcutMod(mods);
+            setShortcutKey(key);
+            invoke("update_shortcut", { modifiers: mods, key });
+            setCaptureOpen(false);
+          }}
+          onClose={() => setCaptureOpen(false)}
+        />
 
         {/* Startup */}
         <Section icon={Play} title="启动行为">

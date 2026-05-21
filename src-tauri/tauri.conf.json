@@ -22,6 +22,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "decorations": false,
         "transparent": true,
         "resizable": true,
@@ -29,6 +30,20 @@
         "width": 800,
         "height": 600,
         "center": true
+      },
+      {
+        "label": "mini",
+        "url": "mini.html",
+        "decorations": false,
+        "transparent": true,
+        "resizable": true,
+        "visible": false,
+        "width": 300,
+        "height": 480,
+        "minWidth": 260,
+        "minHeight": 300,
+        "center": true,
+        "skipTaskbar": true
       }
     ],
     "security": {
