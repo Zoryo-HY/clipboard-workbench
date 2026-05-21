@@ -41,6 +41,8 @@ pub fn start_monitoring(db: Arc<Mutex<Connection>>, handle: AppHandle) {
                             max_text_length: 10000,
                             max_image_size_mb: 10,
                             max_file_size_mb: 50,
+                            total_storage_limit_mb: 500,
+                            auto_clean_days: 30,
                         });
 
                         let max_len = settings.max_text_length as usize;

@@ -16,6 +16,8 @@ pub struct Settings {
     pub max_text_length: i64,
     pub max_image_size_mb: i64,
     pub max_file_size_mb: i64,
+    pub total_storage_limit_mb: i64,
+    pub auto_clean_days: i64,
 }
 
 pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -35,7 +37,9 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
         );
         INSERT OR IGNORE INTO settings (key, value) VALUES ('max_text_length', '10000');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('max_image_size_mb', '10');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('max_file_size_mb', '50');"
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('max_file_size_mb', '50');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('total_storage_limit_mb', '500');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_clean_days', '30');"
     )?;
     Ok(())
 }
@@ -108,10 +112,18 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, rusqlite::Error> {
     let max_file: String = conn
         .query_row("SELECT value FROM settings WHERE key = 'max_file_size_mb'", [], |row| row.get(0))
         .unwrap_or_else(|_| "50".to_string());
+    let storage: String = conn
+        .query_row("SELECT value FROM settings WHERE key = 'total_storage_limit_mb'", [], |row| row.get(0))
+        .unwrap_or_else(|_| "500".to_string());
+    let clean: String = conn
+        .query_row("SELECT value FROM settings WHERE key = 'auto_clean_days'", [], |row| row.get(0))
+        .unwrap_or_else(|_| "30".to_string());
     Ok(Settings {
         max_text_length: max_text.parse().unwrap_or(10000),
         max_image_size_mb: max_img.parse().unwrap_or(10),
         max_file_size_mb: max_file.parse().unwrap_or(50),
+        total_storage_limit_mb: storage.parse().unwrap_or(500),
+        auto_clean_days: clean.parse().unwrap_or(30),
     })
 }
 
@@ -127,6 +139,14 @@ pub fn update_settings(conn: &Connection, settings: &Settings) -> Result<(), rus
     conn.execute(
         "INSERT OR REPLACE INTO settings (key, value) VALUES ('max_file_size_mb', ?1)",
         params![settings.max_file_size_mb.to_string()],
+    )?;
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('total_storage_limit_mb', ?1)",
+        params![settings.total_storage_limit_mb.to_string()],
+    )?;
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('auto_clean_days', ?1)",
+        params![settings.auto_clean_days.to_string()],
     )?;
     Ok(())
 }
