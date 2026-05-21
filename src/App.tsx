@@ -238,29 +238,19 @@ export default function App() {
 
         {/* Center — content stream */}
         <div className="flex-1 min-w-0 border-r border-white/[0.04]">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={category}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.1 }}
-              className="h-full"
-            >
-              <FloatingPanel
-                items={items}
-                category={category}
-                selectedId={selectedItem?.id ?? null}
-                onSelect={handleSelect}
-                onContextMenu={handleContextMenu}
-                onToggleFavorite={handleToggleFavorite}
-                onDelete={handleDelete}
-                onClearAll={handleClearAll}
-                onClearOld={handleClearOld}
-                onClearImages={handleClearImages}
-              />
-            </motion.div>
-          </AnimatePresence>
+          <FloatingPanel
+            key={category}
+            items={items}
+            category={category}
+            selectedId={selectedItem?.id ?? null}
+            onSelect={handleSelect}
+            onContextMenu={handleContextMenu}
+            onToggleFavorite={handleToggleFavorite}
+            onDelete={handleDelete}
+            onClearAll={handleClearAll}
+            onClearOld={handleClearOld}
+            onClearImages={handleClearImages}
+          />
         </div>
 
         {/* Right — workspace */}
