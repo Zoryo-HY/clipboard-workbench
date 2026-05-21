@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
+import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
 import { FloatingPanel } from "./components/FloatingPanel";
 import { DetailPanel } from "./components/DetailPanel";
@@ -13,6 +14,7 @@ export default function App() {
   const [items, setItems] = useState<ClipboardItem[]>([]);
   const [category, setCategory] = useState<CategoryId>("all");
   const [selectedItem, setSelectedItem] = useState<ClipboardItem | null>(null);
+  const [fullContent, setFullContent] = useState<string>("");
   const [settings, setSettings] = useState<Settings>({
     max_text_length: 10000,
     max_image_size_mb: 10,
@@ -66,6 +68,16 @@ export default function App() {
     };
   }, []);
 
+  const handleSelect = useCallback(async (item: ClipboardItem) => {
+    setSelectedItem(item);
+    try {
+      const content = await invoke<string>("get_full_content", { id: item.id });
+      setFullContent(content);
+    } catch {
+      setFullContent(item.content);
+    }
+  }, []);
+
   const handleCopy = useCallback(async () => {
     if (!selectedItem) return;
     await invoke("copy_to_clipboard", { id: selectedItem.id });
@@ -91,6 +103,7 @@ export default function App() {
     await invoke("delete_item", { id: selectedItem.id });
     setItems((prev) => prev.filter((item) => item.id !== selectedItem.id));
     setSelectedItem(null);
+    setFullContent("");
   }, [selectedItem]);
 
   const handleSaveSettings = async (s: Settings) => {
@@ -102,7 +115,8 @@ export default function App() {
 
   if (view === "settings") {
     return (
-      <div className="h-full w-full rounded-2xl overflow-hidden glass-shell">
+      <div className="h-full w-full rounded-2xl overflow-hidden glass-shell flex flex-col">
+        <Titlebar />
         <SettingsPanel
           settings={settings}
           onSave={handleSaveSettings}
@@ -113,52 +127,57 @@ export default function App() {
   }
 
   return (
-    <div className="h-full w-full rounded-2xl overflow-hidden glass-shell flex">
-      {/* Left Sidebar */}
-      <div className="w-[170px] shrink-0 border-r border-white/[0.05]">
-        <Sidebar
-          active={category}
-          onChange={(id) => {
-            setCategory(id);
-            setSelectedItem(null);
-          }}
-          favoriteCount={favoriteCount}
-          onOpenSettings={() => {
-            loadSettings();
-            setView("settings");
-          }}
-        />
-      </div>
+    <div className="h-full w-full rounded-2xl overflow-hidden glass-shell flex flex-col">
+      <Titlebar />
+      <div className="flex-1 flex min-h-0">
+        {/* Left Sidebar */}
+        <div className="w-[170px] shrink-0 border-r border-white/[0.05]">
+          <Sidebar
+            active={category}
+            onChange={(id) => {
+              setCategory(id);
+              setSelectedItem(null);
+              setFullContent("");
+            }}
+            favoriteCount={favoriteCount}
+            onOpenSettings={() => {
+              loadSettings();
+              setView("settings");
+            }}
+          />
+        </div>
 
-      {/* Center - History List */}
-      <div className="flex-1 min-w-0 border-r border-white/[0.05]">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={category}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.12 }}
-            className="h-full"
-          >
-            <FloatingPanel
-              items={items}
-              category={category}
-              selectedId={selectedItem?.id ?? null}
-              onSelect={setSelectedItem}
-            />
-          </motion.div>
-        </AnimatePresence>
-      </div>
+        {/* Center - History List */}
+        <div className="flex-1 min-w-0 border-r border-white/[0.05]">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={category}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              className="h-full"
+            >
+              <FloatingPanel
+                items={items}
+                category={category}
+                selectedId={selectedItem?.id ?? null}
+                onSelect={handleSelect}
+              />
+            </motion.div>
+          </AnimatePresence>
+        </div>
 
-      {/* Right - Detail Panel */}
-      <div className="w-[260px] shrink-0">
-        <DetailPanel
-          item={selectedItem}
-          onCopy={handleCopy}
-          onToggleFavorite={handleToggleFavorite}
-          onDelete={handleDelete}
-        />
+        {/* Right - Detail Panel */}
+        <div className="w-[260px] shrink-0">
+          <DetailPanel
+            item={selectedItem}
+            fullContent={fullContent}
+            onCopy={handleCopy}
+            onToggleFavorite={handleToggleFavorite}
+            onDelete={handleDelete}
+          />
+        </div>
       </div>
     </div>
   );

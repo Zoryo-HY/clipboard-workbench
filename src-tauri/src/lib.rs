@@ -16,6 +16,12 @@ fn get_history(state: tauri::State<AppState>, limit: u32, offset: u32) -> Result
 }
 
 #[tauri::command]
+fn get_full_content(state: tauri::State<AppState>, id: i64) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::get_item_content(&conn, id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn copy_to_clipboard(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let content = db::get_item_content(&conn, id).map_err(|e| e.to_string())?;
@@ -53,6 +59,22 @@ fn update_settings(state: tauri::State<AppState>, settings: db::Settings) -> Res
     db::update_settings(&conn, &settings).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn hide_window(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.hide();
+    }
+}
+
+#[tauri::command]
+fn open_file_location(path: String) -> Result<(), String> {
+    std::process::Command::new("explorer")
+        .args(["/select,", &path])
+        .spawn()
+        .map_err(|e| format!("{}", e))?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -62,8 +84,10 @@ pub fn run() {
                     use tauri_plugin_global_shortcut::ShortcutState;
                     if event.state == ShortcutState::Pressed {
                         if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                            match w.is_visible() {
+                                Ok(true) => { let _ = w.hide(); }
+                                _ => { let _ = w.show(); let _ = w.set_focus(); }
+                            }
                         }
                     }
                 })
@@ -79,20 +103,24 @@ pub fn run() {
             let db = Arc::new(Mutex::new(conn));
             app.manage(AppState { db: db.clone() });
 
+            let images_dir = app_data_dir.join("images");
+
             tray::setup(app)?;
 
             let handle = app.handle().clone();
-            clipboard::start_monitoring(db, handle);
+            clipboard::start_monitoring(db, handle, images_dir);
 
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, Modifiers, Code};
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             app.global_shortcut().register(shortcut)
                 .map_err(|e| format!("{}", e))?;
 
+            // Close button hides to tray instead of quitting
             if let Some(window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
                 window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
                         if let Some(w) = handle.get_webview_window("main") {
                             let _ = w.hide();
                         }
@@ -104,12 +132,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_history,
+            get_full_content,
             copy_to_clipboard,
             toggle_favorite,
             delete_item,
             clear_history,
             get_settings,
             update_settings,
+            hide_window,
+            open_file_location,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
