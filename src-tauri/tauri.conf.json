@@ -23,9 +23,9 @@
     "windows": [
       {
         "title": "Clipboard Workbench",
-        "width": 820,
+        "width": 860,
         "height": 600,
-        "minWidth": 720,
+        "minWidth": 760,
         "minHeight": 400,
         "resizable": true,
         "decorations": false,

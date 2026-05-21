@@ -7,6 +7,7 @@ import { Sidebar } from "./components/Sidebar";
 import { FloatingPanel } from "./components/FloatingPanel";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { ContextMenu, MenuAction } from "./components/ContextMenu";
 import type { ClipboardItem, Settings, CategoryId, View } from "./types";
 
 export default function App() {
@@ -24,11 +25,17 @@ export default function App() {
     start_minimized: false,
   });
 
+  // Context menu state
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number; y: number; item: ClipboardItem;
+  } | null>(null);
+
+  // ── Data loading ──────────────────────────────
+
   const loadHistory = useCallback(async () => {
     try {
       const data = await invoke<ClipboardItem[]>("get_history", {
-        limit: 500,
-        offset: 0,
+        limit: 500, offset: 0,
       });
       setItems(data);
     } catch (e) {
@@ -50,24 +57,35 @@ export default function App() {
     loadSettings();
   }, [loadHistory, loadSettings]);
 
+  // ── Event listeners ───────────────────────────
+
   useEffect(() => {
-    let unlistenClipboard: UnlistenFn | undefined;
+    let ulClip: UnlistenFn | undefined;
     listen<ClipboardItem>("clipboard-changed", (event) => {
       setItems((prev) => [event.payload, ...prev]);
-    }).then((fn) => { unlistenClipboard = fn; });
+    }).then((fn) => { ulClip = fn; });
 
-    let unlistenNav: UnlistenFn | undefined;
+    let ulNav: UnlistenFn | undefined;
     listen<string>("navigate", (event) => {
-      if (event.payload === "settings") {
-        setView("settings");
-      }
-    }).then((fn) => { unlistenNav = fn; });
+      if (event.payload === "settings") setView("settings");
+    }).then((fn) => { ulNav = fn; });
 
-    return () => {
-      unlistenClipboard?.();
-      unlistenNav?.();
-    };
+    return () => { ulClip?.(); ulNav?.(); };
   }, []);
+
+  // ── Keyboard shortcuts ────────────────────────
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Delete" && selectedItem && view === "history") {
+        handleDelete(selectedItem);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedItem, view]);
+
+  // ── Item actions ──────────────────────────────
 
   const handleSelect = useCallback(async (item: ClipboardItem) => {
     setSelectedItem(item);
@@ -84,39 +102,103 @@ export default function App() {
     await invoke("copy_to_clipboard", { id: selectedItem.id });
   }, [selectedItem]);
 
-  const handleToggleFavorite = useCallback(async () => {
-    if (!selectedItem) return;
-    await invoke("toggle_favorite", { id: selectedItem.id });
+  const handleToggleFavorite = useCallback(async (item: ClipboardItem) => {
+    await invoke("toggle_favorite", { id: item.id });
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === selectedItem.id
-          ? { ...item, is_favorite: !item.is_favorite }
-          : item
-      )
+      prev.map((i) => i.id === item.id ? { ...i, is_favorite: !i.is_favorite } : i)
     );
     setSelectedItem((prev) =>
-      prev ? { ...prev, is_favorite: !prev.is_favorite } : null
+      prev?.id === item.id ? { ...prev, is_favorite: !prev.is_favorite } : prev
     );
+  }, []);
+
+  const handleDelete = useCallback(async (item: ClipboardItem) => {
+    await invoke("delete_item", { id: item.id });
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+    if (selectedItem?.id === item.id) {
+      setSelectedItem(null);
+      setFullContent("");
+    }
   }, [selectedItem]);
 
-  const handleDelete = useCallback(async () => {
-    if (!selectedItem) return;
-    await invoke("delete_item", { id: selectedItem.id });
-    setItems((prev) => prev.filter((item) => item.id !== selectedItem.id));
+  // ── Bulk actions ──────────────────────────────
+
+  const handleClearAll = async () => {
+    await invoke("clear_history");
+    setItems((prev) => prev.filter((i) => i.is_favorite));
     setSelectedItem(null);
     setFullContent("");
-  }, [selectedItem]);
+  };
+
+  const handleClearOld = async (days: number) => {
+    // Delete non-favorite items older than N days
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    const toDelete = items.filter(
+      (i) => !i.is_favorite && i.created_at < cutoff
+    );
+    for (const item of toDelete) {
+      await invoke("delete_item", { id: item.id });
+    }
+    setItems((prev) => prev.filter((i) => !toDelete.find((d) => d.id === i.id)));
+    if (selectedItem && toDelete.find((d) => d.id === selectedItem.id)) {
+      setSelectedItem(null);
+      setFullContent("");
+    }
+  };
+
+  const handleClearImages = async () => {
+    const toDelete = items.filter((i) => i.content_type === "image" && !i.is_favorite);
+    for (const item of toDelete) {
+      await invoke("delete_item", { id: item.id });
+    }
+    setItems((prev) => prev.filter((i) => !toDelete.find((d) => d.id === i.id)));
+    if (selectedItem && toDelete.find((d) => d.id === selectedItem.id)) {
+      setSelectedItem(null);
+      setFullContent("");
+    }
+  };
+
+  // ── Context menu ──────────────────────────────
+
+  const handleContextMenu = (e: React.MouseEvent, item: ClipboardItem) => {
+    e.preventDefault();
+    setCtxMenu({ x: e.clientX, y: e.clientY, item });
+  };
+
+  const ctxActions: MenuAction[] = ctxMenu
+    ? [
+        { label: "复制", onClick: () => {
+          setSelectedItem(ctxMenu.item);
+          invoke("copy_to_clipboard", { id: ctxMenu.item.id });
+        }},
+        { label: ctxMenu.item.is_favorite ? "取消收藏" : "收藏",
+          onClick: () => handleToggleFavorite(ctxMenu.item) },
+        { label: "导出", onClick: () => {
+          const content = ctxMenu.item.content;
+          const blob = new Blob([content], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `clipboard-${ctxMenu.item.id}.txt`;
+          a.click();
+          URL.revokeObjectURL(url);
+        }},
+        { label: "删除", onClick: () => handleDelete(ctxMenu.item), danger: true },
+      ]
+    : [];
+
+  // ── Settings ──────────────────────────────────
 
   const handleSaveSettings = async (s: Settings) => {
     await invoke("update_settings", { settings: s });
     setSettings(s);
   };
 
-  const favoriteCount = items.filter((i) => i.is_favorite).length;
+  // ── View: Settings ────────────────────────────
 
   if (view === "settings") {
     return (
-      <div className="h-full w-full rounded-2xl overflow-hidden glass-shell flex flex-col">
+      <div className="h-full w-full rounded-xl overflow-hidden shell flex flex-col">
         <Titlebar />
         <SettingsPanel
           settings={settings}
@@ -127,12 +209,17 @@ export default function App() {
     );
   }
 
+  // ── View: Main ────────────────────────────────
+
+  const favoriteCount = items.filter((i) => i.is_favorite).length;
+
   return (
-    <div className="h-full w-full rounded-2xl overflow-hidden glass-shell flex flex-col">
+    <div className="h-full w-full rounded-xl overflow-hidden shell flex flex-col">
       <Titlebar />
+
       <div className="flex-1 flex min-h-0">
-        {/* Left Sidebar */}
-        <div className="w-[155px] shrink-0 border-r border-white/[0.04]">
+        {/* Left Sidebar — navigation */}
+        <div className="w-[135px] shrink-0 border-r border-white/[0.04]">
           <Sidebar
             active={category}
             onChange={(id) => {
@@ -148,7 +235,7 @@ export default function App() {
           />
         </div>
 
-        {/* Center - History List */}
+        {/* Center — content stream */}
         <div className="flex-1 min-w-0 border-r border-white/[0.04]">
           <AnimatePresence mode="wait">
             <motion.div
@@ -156,7 +243,7 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.12 }}
+              transition={{ duration: 0.1 }}
               className="h-full"
             >
               <FloatingPanel
@@ -164,22 +251,43 @@ export default function App() {
                 category={category}
                 selectedId={selectedItem?.id ?? null}
                 onSelect={handleSelect}
+                onContextMenu={handleContextMenu}
+                onToggleFavorite={handleToggleFavorite}
+                onDelete={handleDelete}
+                onClearAll={handleClearAll}
+                onClearOld={handleClearOld}
+                onClearImages={handleClearImages}
               />
             </motion.div>
           </AnimatePresence>
         </div>
 
-        {/* Right - Detail Panel */}
-        <div className="w-[240px] shrink-0">
+        {/* Right — workspace */}
+        <div className="w-[280px] shrink-0">
           <DetailPanel
             item={selectedItem}
             fullContent={fullContent}
             onCopy={handleCopy}
-            onToggleFavorite={handleToggleFavorite}
-            onDelete={handleDelete}
+            onToggleFavorite={() => {
+              if (selectedItem) handleToggleFavorite(selectedItem);
+            }}
+            onDelete={() => {
+              if (selectedItem) handleDelete(selectedItem);
+            }}
           />
         </div>
       </div>
+
+      {/* Context menu overlay */}
+      {ctxMenu && (
+        <ContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          item={ctxMenu.item}
+          actions={ctxActions}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,19 +1,23 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { FileText, Link, Image, File, Code2, Star } from "lucide-react";
+import { FileText, Link, Image, File, Code2, Star, Trash2, MoreHorizontal } from "lucide-react";
 import type { ClipboardItem } from "../types";
 
 interface Props {
   item: ClipboardItem;
   isSelected: boolean;
   onClick: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  onToggleFavorite: () => void;
+  onDelete: () => void;
 }
 
-const typeConfig: Record<string, { icon: typeof FileText; color: string; bgColor: string }> = {
-  text: { icon: FileText, color: "text-zinc-400", bgColor: "bg-zinc-500/10" },
-  link: { icon: Link, color: "text-blue-400", bgColor: "bg-blue-500/10" },
-  image: { icon: Image, color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
-  file: { icon: File, color: "text-amber-400", bgColor: "bg-amber-500/10" },
-  code: { icon: Code2, color: "text-violet-400", bgColor: "bg-violet-500/10" },
+const typeConfig: Record<string, { icon: typeof FileText; label: string }> = {
+  text: { icon: FileText, label: "文本" },
+  link: { icon: Link, label: "链接" },
+  image: { icon: Image, label: "图片" },
+  file: { icon: File, label: "文件" },
+  code: { icon: Code2, label: "代码" },
 };
 
 function timeAgo(iso: string): string {
@@ -27,7 +31,8 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)} 天前`;
 }
 
-export function HistoryItem({ item, isSelected, onClick }: Props) {
+export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggleFavorite, onDelete }: Props) {
+  const [hovered, setHovered] = useState(false);
   const config = typeConfig[item.content_type] || typeConfig.text;
   const Icon = config.icon;
 
@@ -39,36 +44,62 @@ export function HistoryItem({ item, isSelected, onClick }: Props) {
       exit={{ opacity: 0, height: 0, marginBottom: 0 }}
       transition={{ duration: 0.12 }}
       onClick={onClick}
-      className={`group px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors
-        border ${
-          isSelected
-            ? "bg-violet-500/8 border-violet-500/20"
-            : "border-transparent hover:bg-white/[0.02] hover:border-white/[0.04]"
-        }`}
+      onContextMenu={onContextMenu}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className={`group px-3 py-3 rounded-lg cursor-pointer transition-colors border ${
+        isSelected
+          ? "card-active"
+          : "border-transparent hover:bg-[#171a20] hover:border-white/[0.04]"
+      }`}
     >
-      <div className="flex items-start gap-2">
-        <div className={`shrink-0 mt-0.5 w-5 h-5 rounded-md flex items-center justify-center
-          ${isSelected ? "bg-violet-500/12" : config.bgColor}`}>
-          <Icon className={`w-2.5 h-2.5 ${config.color}`} />
+      <div className="flex items-start gap-3">
+        {/* Type icon */}
+        <div className={`shrink-0 mt-0.5 w-7 h-7 rounded-md flex items-center justify-center ${
+          isSelected ? "bg-violet-500/12" : "bg-white/[0.03]"
+        }`}>
+          <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-violet-400" : "text-zinc-500"}`} />
         </div>
 
+        {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-zinc-300 leading-[1.4] line-clamp-2 break-words">
-            {item.content.slice(0, 120)}
+          <p className="text-sm text-zinc-200 leading-[1.5] line-clamp-2 break-words font-medium">
+            {item.content.slice(0, 160)}
           </p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] text-zinc-600">{timeAgo(item.created_at)}</span>
-            <span className="text-[10px] text-zinc-700">
-              {item.size > 1024
-                ? `${(item.size / 1024).toFixed(1)} KB`
-                : `${item.size} B`}
-            </span>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-zinc-500">{timeAgo(item.created_at)}</span>
+            <span className="text-[11px] text-zinc-600">{config.label}</span>
+            {item.size > 1024 && (
+              <span className="text-[11px] text-zinc-600">
+                {(item.size / 1024).toFixed(1)} KB
+              </span>
+            )}
           </div>
         </div>
 
-        {item.is_favorite && (
-          <Star className="w-2.5 h-2.5 text-amber-500/60 shrink-0 mt-0.5" fill="currentColor" />
-        )}
+        {/* Actions on hover */}
+        <div className={`shrink-0 flex items-center gap-0.5 transition-opacity ${
+          hovered || item.is_favorite ? "opacity-100" : "opacity-0"
+        }`}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+            className={`p-1 rounded transition-colors ${
+              item.is_favorite
+                ? "text-amber-400 hover:bg-amber-500/10"
+                : "text-zinc-500 hover:text-amber-400 hover:bg-white/[0.04]"
+            }`}
+            title={item.is_favorite ? "取消收藏" : "收藏"}
+          >
+            <Star className="w-4 h-4" fill={item.is_favorite ? "currentColor" : "none"} />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-red-500/8 transition-colors"
+            title="删除"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </motion.div>
   );
