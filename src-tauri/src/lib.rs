@@ -101,8 +101,9 @@ fn delete_item(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
         db::delete_item(&conn, id).map_err(|e| e.to_string())?;
     }
 
-    // If image/file, also delete the file on disk
-    if content_type == "image" || content_type == "file" {
+    // Only delete image files (copies created by the app).
+    // "file" type entries point to original user files — must not touch them.
+    if content_type == "image" {
         let _ = std::fs::remove_file(&content);
     }
 
