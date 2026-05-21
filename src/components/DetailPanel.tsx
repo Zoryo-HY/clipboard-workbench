@@ -30,7 +30,7 @@ const typeLabels: Record<string, string> = {
 export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDelete }: Props) {
   if (!item) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div data-tauri-drag-region className="h-full flex items-center justify-center">
         <div className="text-center px-4">
           <div className="w-8 h-8 rounded-lg bg-white/[0.02] border border-white/[0.04]
             flex items-center justify-center mx-auto mb-1.5">
@@ -119,13 +119,13 @@ export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDel
             <ActionBtn icon={Sparkles} label="清理格式" onClick={() => {}} />
             <ActionBtn icon={Link} label="提取链接" onClick={() => {
               const extracted = extractUrls(fullContent).join('\n');
-              if (extracted) navigator.clipboard.writeText(extracted);
+              if (extracted) invoke("write_to_clipboard", { text: extracted });
             }} />
             <ActionBtn icon={FileCode} label="转 Markdown" onClick={() => {
-              navigator.clipboard.writeText('```\n' + fullContent + '\n```');
+              invoke("write_to_clipboard", { text: '```\n' + fullContent + '\n```' });
             }} />
             <ActionBtn icon={Trash2} label="删除空行" onClick={() => {
-              navigator.clipboard.writeText(removeEmptyLines(fullContent));
+              invoke("write_to_clipboard", { text: removeEmptyLines(fullContent) });
             }} />
             <ActionBtn icon={Star} label={item.is_favorite ? "取消收藏" : "收藏"}
               onClick={onToggleFavorite} active={item.is_favorite} />

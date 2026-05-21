@@ -15,6 +15,7 @@ export interface Settings {
   max_file_size_mb: number;
   total_storage_limit_mb: number;
   auto_clean_days: number;
+  start_minimized: boolean;
 }
 
 export type View = 'history' | 'settings';

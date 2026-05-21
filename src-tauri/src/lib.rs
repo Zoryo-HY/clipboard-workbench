@@ -25,19 +25,55 @@ fn get_full_content(state: tauri::State<AppState>, id: i64) -> Result<String, St
 }
 
 #[tauri::command]
-fn copy_to_clipboard(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    let content = db::get_item_content(&conn, id).map_err(|e| e.to_string())?;
-
+fn write_to_clipboard(state: tauri::State<AppState>, text: String) -> Result<(), String> {
     let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
+    hasher.update(text.as_bytes());
     let hash = format!("{:x}", hasher.finalize());
 
     let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    cb.set_text(&content).map_err(|e| e.to_string())?;
+    cb.set_text(&text).map_err(|e| e.to_string())?;
 
     let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
     *lw = (hash, Instant::now());
+
+    Ok(())
+}
+
+#[tauri::command]
+fn copy_to_clipboard(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
+    let content_type = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_item_type(&conn, id).map_err(|e| e.to_string())?
+    };
+
+    if content_type == "image" {
+        let path = {
+            let conn = state.db.lock().map_err(|e| e.to_string())?;
+            db::get_item_content(&conn, id).map_err(|e| e.to_string())?
+        };
+        let img = image::open(&path).map_err(|e| format!("Failed to open image: {}", e))?;
+        let rgba = img.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        let img_data = arboard::ImageData {
+            width: w as usize,
+            height: h as usize,
+            bytes: rgba.into_raw().into(),
+        };
+        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        cb.set_image(img_data).map_err(|e| e.to_string())?;
+    } else {
+        let content = {
+            let conn = state.db.lock().map_err(|e| e.to_string())?;
+            db::get_item_content(&conn, id).map_err(|e| e.to_string())?
+        };
+        let mut hasher = Sha256::new();
+        hasher.update(content.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+        let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+        cb.set_text(&content).map_err(|e| e.to_string())?;
+        let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
+        *lw = (hash, Instant::now());
+    }
 
     Ok(())
 }
@@ -56,8 +92,14 @@ fn delete_item(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
 
 #[tauri::command]
 fn clear_history(state: tauri::State<AppState>) -> Result<(), String> {
-    let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::clear_history(&conn).map_err(|e| e.to_string())
+    let image_paths = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::clear_history(&conn).map_err(|e| e.to_string())?
+    };
+    for path in &image_paths {
+        let _ = std::fs::remove_file(path);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -113,6 +155,10 @@ pub fn run() {
             let conn = rusqlite::Connection::open(&db_path)?;
             db::init(&conn)?;
 
+            let start_minimized = db::get_settings(&conn)
+                .map(|s| s.start_minimized)
+                .unwrap_or(false);
+
             let db = Arc::new(Mutex::new(conn));
             let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
 
@@ -122,6 +168,7 @@ pub fn run() {
             });
 
             let images_dir = app_data_dir.join("images");
+            std::fs::create_dir_all(&images_dir)?;
 
             tray::setup(app)?;
 
@@ -143,6 +190,10 @@ pub fn run() {
                         }
                     }
                 });
+
+                if start_minimized {
+                    let _ = window.hide();
+                }
             }
 
             Ok(())
@@ -150,6 +201,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_history,
             get_full_content,
+            write_to_clipboard,
             copy_to_clipboard,
             toggle_favorite,
             delete_item,

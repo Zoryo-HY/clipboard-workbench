@@ -28,6 +28,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       max_file_size_mb: maxFile,
       total_storage_limit_mb: storage,
       auto_clean_days: autoClean ? cleanDays : 0,
+      start_minimized: startMinimized,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);

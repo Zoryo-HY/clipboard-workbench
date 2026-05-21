@@ -21,6 +21,7 @@ export default function App() {
     max_file_size_mb: 50,
     total_storage_limit_mb: 500,
     auto_clean_days: 30,
+    start_minimized: false,
   });
 
   const loadHistory = useCallback(async () => {

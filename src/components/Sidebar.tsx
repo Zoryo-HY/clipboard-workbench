@@ -20,7 +20,7 @@ const categories: { id: CategoryId; label: string; icon: typeof Layers }[] = [
 
 export function Sidebar({ active, onChange, favoriteCount, onOpenSettings }: Props) {
   return (
-    <div className="flex flex-col h-full px-2 py-2.5">
+    <div data-tauri-drag-region className="flex flex-col h-full px-2 py-2.5">
       <div className="px-2 pb-2.5">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-md bg-violet-500/20 flex items-center justify-center">
