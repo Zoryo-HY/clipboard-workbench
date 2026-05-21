@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { FileText, Link, Image, File, Code2, Star, Trash2, MoreHorizontal } from "lucide-react";
+import { FileText, Link, Image, File, Code2, Star, Trash2 } from "lucide-react";
 import type { ClipboardItem } from "../types";
 
 interface Props {
@@ -10,15 +10,35 @@ interface Props {
   onContextMenu: (e: React.MouseEvent) => void;
   onToggleFavorite: () => void;
   onDelete: () => void;
+  onDoubleClickImage?: () => void;
 }
 
-const typeConfig: Record<string, { icon: typeof FileText; label: string }> = {
-  text: { icon: FileText, label: "文本" },
-  link: { icon: Link, label: "链接" },
-  image: { icon: Image, label: "图片" },
-  file: { icon: File, label: "文件" },
-  code: { icon: Code2, label: "代码" },
+const typeConfig: Record<string, { icon: typeof FileText; label: string; accent: string }> = {
+  text:   { icon: FileText, label: "文本", accent: "text-zinc-400" },
+  link:   { icon: Link, label: "链接", accent: "text-violet-400" },
+  image:  { icon: Image, label: "图片", accent: "text-emerald-400" },
+  file:   { icon: File, label: "文件", accent: "text-amber-400" },
+  code:   { icon: Code2, label: "代码", accent: "text-sky-400" },
 };
+
+const fileExtIcons: Record<string, string> = {
+  pdf: "📄", doc: "📝", docx: "📝", xls: "📊", xlsx: "📊",
+  ppt: "📽", pptx: "📽", zip: "📦", rar: "📦", "7z": "📦",
+  exe: "⚙", dll: "🔧", png: "🖼", jpg: "🖼", jpeg: "🖼",
+  gif: "🖼", svg: "🖼", webp: "🖼", mp3: "🎵", wav: "🎵",
+  mp4: "🎬", avi: "🎬", mov: "🎬", py: "🐍", rs: "🦀",
+  js: "📜", ts: "📜", html: "🌐", css: "🎨", json: "📋",
+};
+
+function getFileExtIcon(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase() || "";
+  return fileExtIcons[ext] || "📁";
+}
+
+function fileName(path: string): string {
+  const name = path.split("\\").pop() || path.split("/").pop() || path;
+  return name;
+}
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -31,10 +51,87 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hr / 24)} 天前`;
 }
 
-export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggleFavorite, onDelete }: Props) {
+export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggleFavorite, onDelete, onDoubleClickImage }: Props) {
   const [hovered, setHovered] = useState(false);
+  const [imgLoaded, setImgLoaded] = useState(false);
   const config = typeConfig[item.content_type] || typeConfig.text;
   const Icon = config.icon;
+
+  const renderContent = () => {
+    if (item.content_type === "image" && item.thumbnail) {
+      return (
+        <div className="flex items-start gap-3">
+          <div className="shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-[#0d0f13] border border-white/[0.04] relative">
+            {!imgLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+              </div>
+            )}
+            <img
+              src={`data:image/png;base64,${item.thumbnail}`}
+              alt="clipboard"
+              className={`w-full h-full object-cover ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+              onLoad={() => setImgLoaded(true)}
+              onDoubleClick={(e) => { e.stopPropagation(); onDoubleClickImage?.(); }}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <Image className={`w-3.5 h-3.5 ${config.accent}`} />
+              <span className={`text-xs font-medium ${config.accent}`}>{config.label}</span>
+              {item.size > 0 && (
+                <span className="text-[11px] text-zinc-600">
+                  {(item.size / 1024).toFixed(0)} KB
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-zinc-500 mt-1">{timeAgo(item.created_at)}</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (item.content_type === "file") {
+      const name = fileName(item.content);
+      const extIcon = getFileExtIcon(item.content);
+      return (
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 w-10 h-10 rounded-lg bg-white/[0.03] border border-white/[0.04] flex items-center justify-center text-lg">
+            {extIcon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-zinc-200 truncate font-medium">{name}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{timeAgo(item.created_at)} · {config.label}</p>
+          </div>
+        </div>
+      );
+    }
+
+    // Text / link / code
+    return (
+      <div className="flex items-start gap-3">
+        <div className={`shrink-0 mt-0.5 w-7 h-7 rounded-md flex items-center justify-center ${
+          isSelected ? "bg-violet-500/12" : "bg-white/[0.03]"
+        }`}>
+          <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-violet-400" : config.accent}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-zinc-200 leading-[1.5] line-clamp-2 break-words font-medium">
+            {item.content.slice(0, 160)}
+          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs text-zinc-500">{timeAgo(item.created_at)}</span>
+            <span className="text-[11px] text-zinc-600">{config.label}</span>
+            {item.size > 1024 && (
+              <span className="text-[11px] text-zinc-600">
+                {(item.size / 1024).toFixed(1)} KB
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <motion.div
@@ -54,27 +151,8 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
       }`}
     >
       <div className="flex items-start gap-3">
-        {/* Type icon */}
-        <div className={`shrink-0 mt-0.5 w-7 h-7 rounded-md flex items-center justify-center ${
-          isSelected ? "bg-violet-500/12" : "bg-white/[0.03]"
-        }`}>
-          <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-violet-400" : "text-zinc-500"}`} />
-        </div>
-
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-zinc-200 leading-[1.5] line-clamp-2 break-words font-medium">
-            {item.content.slice(0, 160)}
-          </p>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="text-xs text-zinc-500">{timeAgo(item.created_at)}</span>
-            <span className="text-[11px] text-zinc-600">{config.label}</span>
-            {item.size > 1024 && (
-              <span className="text-[11px] text-zinc-600">
-                {(item.size / 1024).toFixed(1)} KB
-              </span>
-            )}
-          </div>
+          {renderContent()}
         </div>
 
         {/* Actions on hover */}

@@ -1,51 +1,92 @@
-import { useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, X } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { Minus, Square, Copy, X } from 'lucide-react';
 
-export function Titlebar() {
-  const dragRef = useRef<HTMLDivElement>(null);
+export const Titlebar: React.FC = () => {
+  const [isMaximized, setIsMaximized] = useState(false);
+  const appWindow = getCurrentWindow();
 
   useEffect(() => {
-    const el = dragRef.current;
-    if (!el) return;
-    const onMouseDown = () => {
-      getCurrentWindow().startDragging();
-    };
-    el.addEventListener("mousedown", onMouseDown);
-    return () => el.removeEventListener("mousedown", onMouseDown);
+    appWindow.isMaximized().then(setIsMaximized);
+    const unlisten = appWindow.onResized(() => {
+      appWindow.isMaximized().then(setIsMaximized);
+    });
+    return () => { unlisten.then((fn: () => void) => fn()); };
   }, []);
 
+  const btnBase: React.CSSProperties = {
+    width: 36,
+    height: 28,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: 'none',
+    background: 'transparent',
+    color: '#888',
+    cursor: 'pointer',
+    borderRadius: 4,
+    transition: 'background 0.15s, color 0.15s',
+  };
+
   return (
-    <div className="h-9 shrink-0 flex items-center border-b border-white/[0.04] select-none">
+    <div
+      style={{
+        height: '32px',
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        background: 'transparent',
+        position: 'relative',
+        zIndex: 100,
+      }}
+    >
+      {/* Drag region */}
       <div
-        ref={dragRef}
         data-tauri-drag-region
-        className="flex-1 h-full flex items-center pl-3 cursor-grab active:cursor-grabbing"
+        style={{
+          flex: 1,
+          height: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          WebkitAppRegion: 'drag',
+          msAppRegion: 'drag',
+          cursor: 'default',
+        } as React.CSSProperties}
       >
-        <div className="flex items-center gap-2 pointer-events-none">
-          <div className="w-2.5 h-2.5 rounded-full bg-violet-500/40" />
-          <span className="text-xs font-medium text-zinc-500 tracking-wide">
-            剪贴板工作台
-          </span>
-        </div>
+        <span style={{ color: '#888', fontSize: '12px', userSelect: 'none', pointerEvents: 'none' }}>
+          Clipboard Workbench
+        </span>
       </div>
-      <div className="flex items-center gap-0.5 pr-2">
+
+      {/* Window controls — using invoke for reliability */}
+      <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingRight: 4 }}>
         <button
-          onClick={() => invoke("hide_window")}
-          className="w-7 h-7 flex items-center justify-center rounded-md
-            text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors"
+          onClick={() => { console.log('minimize clicked'); invoke('minimize_window'); }}
+          style={btnBase}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#ccc'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
         >
-          <Minus className="w-3.5 h-3.5" />
+          <Minus size={14} />
         </button>
         <button
-          onClick={() => invoke("hide_window")}
-          className="w-7 h-7 flex items-center justify-center rounded-md
-            text-zinc-500 hover:text-red-400 hover:bg-red-500/8 transition-colors"
+          onClick={() => { console.log('maximize clicked'); invoke('toggle_maximize_window'); }}
+          style={btnBase}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#ccc'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
         >
-          <X className="w-3.5 h-3.5" />
+          {isMaximized ? <Copy size={12} /> : <Square size={12} />}
+        </button>
+        <button
+          onClick={() => { console.log('close clicked'); invoke('close_window'); }}
+          style={btnBase}
+          onMouseEnter={(e) => { e.currentTarget.style.background = '#e81123'; e.currentTarget.style.color = '#fff'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
+        >
+          <X size={15} />
         </button>
       </div>
     </div>
   );
-}
+};

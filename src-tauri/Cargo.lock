@@ -679,6 +679,7 @@ name = "clipboard-workbench"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "chrono",
  "image",
  "rfd",

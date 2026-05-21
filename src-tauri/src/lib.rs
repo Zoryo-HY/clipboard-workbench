@@ -135,6 +135,31 @@ fn update_settings(state: tauri::State<AppState>, settings: db::Settings) -> Res
 }
 
 #[tauri::command]
+fn minimize_window(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.minimize();
+    }
+}
+
+#[tauri::command]
+fn toggle_maximize_window(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        if w.is_maximized().unwrap_or(false) {
+            let _ = w.unmaximize();
+        } else {
+            let _ = w.maximize();
+        }
+    }
+}
+
+#[tauri::command]
+fn close_window(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.close();
+    }
+}
+
+#[tauri::command]
 fn hide_window(app: tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
@@ -147,6 +172,19 @@ fn open_file_location(path: String) -> Result<(), String> {
         .args(["/select,", &path])
         .spawn()
         .map_err(|e| format!("{}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn open_image(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err(format!("文件不存在: {}", path));
+    }
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &path])
+        .spawn()
+        .map_err(|e| format!("无法打开文件: {}", e))?;
     Ok(())
 }
 
@@ -203,16 +241,6 @@ pub fn run() {
             let conn = rusqlite::Connection::open(&db_path)?;
             db::init(&conn)?;
 
-            let settings = db::get_settings(&conn).unwrap_or(db::Settings {
-                max_text_length: 10000,
-                max_image_size_mb: 10,
-                max_file_size_mb: 50,
-                total_storage_limit_mb: 500,
-                auto_clean_days: 30,
-                start_minimized: false,
-                storage_path: String::new(),
-            });
-
             let db = Arc::new(Mutex::new(conn));
             let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
 
@@ -236,6 +264,10 @@ pub fn run() {
                 .map_err(|e| format!("{}", e))?;
 
             if let Some(window) = app.get_webview_window("main") {
+                // Ensure window is visible on startup
+                let _ = window.show();
+                let _ = window.set_focus();
+
                 let handle = app.handle().clone();
                 window.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -245,10 +277,6 @@ pub fn run() {
                         }
                     }
                 });
-
-                if settings.start_minimized {
-                    let _ = window.hide();
-                }
             }
 
             Ok(())
@@ -263,8 +291,12 @@ pub fn run() {
             clear_history,
             get_settings,
             update_settings,
+            minimize_window,
+            toggle_maximize_window,
+            close_window,
             hide_window,
             open_file_location,
+            open_image,
             pick_folder,
             get_data_dir,
         ])

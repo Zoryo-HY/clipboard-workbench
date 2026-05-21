@@ -4,10 +4,15 @@ version = "0.1.0"
 description = "A local clipboard workbench"
 authors = ["user"]
 edition = "2021"
+default-run = "clipboard-workbench"
 
 [lib]
 name = "clipboard_workbench_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "clean_db"
+path = "src/clean_db.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -23,3 +28,4 @@ image = "0.25"
 sha2 = "0.10"
 chrono = "0.4"
 rfd = "0.15"
+base64 = "0.22"

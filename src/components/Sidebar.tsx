@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { FileText, Link, Image, File, Code2, Star, Settings, Clipboard } from "lucide-react";
 import type { CategoryId } from "../types";
 
@@ -25,8 +24,8 @@ export function Sidebar({ active, onChange, favoriteCount, onOpenSettings }: Pro
       {/* Logo */}
       <div
         data-tauri-drag-region
-        onMouseDown={() => getCurrentWindow().startDragging()}
-        className="px-3 pb-3 cursor-grab active:cursor-grabbing"
+        className="px-3 pb-3"
+        style={{ cursor: 'default' } as React.CSSProperties}
       >
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-md bg-violet-500/15 flex items-center justify-center">

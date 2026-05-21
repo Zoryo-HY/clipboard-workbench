@@ -6,6 +6,8 @@ pub struct ClipboardItem {
     pub id: i64,
     pub content_type: String,
     pub content: String,
+    #[serde(default)]
+    pub thumbnail: Option<String>,
     pub size: i64,
     pub is_favorite: bool,
     pub created_at: String,
@@ -31,6 +33,7 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
             content_type TEXT NOT NULL,
             content TEXT NOT NULL,
             content_hash TEXT NOT NULL UNIQUE,
+            thumbnail TEXT,
             size INTEGER DEFAULT 0,
             is_favorite INTEGER DEFAULT 0,
             created_at TEXT NOT NULL
@@ -47,30 +50,34 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
         INSERT OR IGNORE INTO settings (key, value) VALUES ('start_minimized', 'false');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_path', '');"
     )?;
+    // Migration: add thumbnail column for existing databases
+    let _ = conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN thumbnail TEXT;");
     Ok(())
 }
 
-pub fn insert_item(conn: &Connection, content_type: &str, content: &str, hash: &str, size: i64) -> Result<i64, rusqlite::Error> {
-    conn.execute(
-        "INSERT OR IGNORE INTO clipboard_items (content_type, content, content_hash, size, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![content_type, content, hash, size, chrono::Utc::now().to_rfc3339()],
-    )?;
-    Ok(conn.last_insert_rowid())
-}
-
-pub fn hash_exists(conn: &Connection, hash: &str) -> Result<bool, rusqlite::Error> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM clipboard_items WHERE content_hash = ?1",
+/// Insert or replace a clipboard item keyed by content_hash.
+/// Returns (new_id, old_id, old_content) — old_id/old_content come from
+/// the previous record if one was replaced (for cleanup + frontend sync).
+pub fn insert_item(conn: &Connection, content_type: &str, content: &str, hash: &str, size: i64, thumbnail: Option<&str>) -> Result<(i64, Option<i64>, Option<String>), rusqlite::Error> {
+    let old = conn.query_row(
+        "SELECT id, content FROM clipboard_items WHERE content_hash = ?1",
         params![hash],
-        |row| row.get(0),
+        |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+    ).ok();
+
+    conn.execute(
+        "INSERT OR REPLACE INTO clipboard_items (content_type, content, content_hash, thumbnail, size, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![content_type, content, hash, thumbnail, size, chrono::Utc::now().to_rfc3339()],
     )?;
-    Ok(count > 0)
+
+    let new_id = conn.last_insert_rowid();
+    Ok((new_id, old.as_ref().map(|o| o.0), old.map(|o| o.1)))
 }
 
 pub fn get_history(conn: &Connection, limit: u32, offset: u32) -> Result<Vec<ClipboardItem>, rusqlite::Error> {
     let mut stmt = conn.prepare(
-        "SELECT id, content_type, content, size, is_favorite, created_at
+        "SELECT id, content_type, content, thumbnail, size, is_favorite, created_at
          FROM clipboard_items ORDER BY id DESC LIMIT ?1 OFFSET ?2"
     )?;
     let items = stmt.query_map(params![limit, offset], |row| {
@@ -78,9 +85,10 @@ pub fn get_history(conn: &Connection, limit: u32, offset: u32) -> Result<Vec<Cli
             id: row.get(0)?,
             content_type: row.get(1)?,
             content: row.get(2)?,
-            size: row.get(3)?,
-            is_favorite: row.get::<_, i64>(4)? != 0,
-            created_at: row.get(5)?,
+            thumbnail: row.get(3)?,
+            size: row.get(4)?,
+            is_favorite: row.get::<_, i64>(5)? != 0,
+            created_at: row.get(6)?,
         })
     })?.collect::<Result<Vec<_>, _>>()?;
     Ok(items)

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { AnimatePresence, motion } from "framer-motion";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
@@ -8,7 +8,7 @@ import { FloatingPanel } from "./components/FloatingPanel";
 import { DetailPanel } from "./components/DetailPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { ContextMenu, MenuAction } from "./components/ContextMenu";
-import type { ClipboardItem, Settings, CategoryId, View } from "./types";
+import type { ClipboardItem, ClipboardEventPayload, Settings, CategoryId, View } from "./types";
 
 export default function App() {
   const [view, setView] = useState<View>("history");
@@ -61,17 +61,25 @@ export default function App() {
   // ── Event listeners ───────────────────────────
 
   useEffect(() => {
-    let ulClip: UnlistenFn | undefined;
-    listen<ClipboardItem>("clipboard-changed", (event) => {
-      setItems((prev) => [event.payload, ...prev]);
-    }).then((fn) => { ulClip = fn; });
+    // Hold onto the promises so cleanup can unsubscribe even when the
+    // component unmounts before listen() resolves (React StrictMode).
+    const pClip = listen<ClipboardEventPayload>("clipboard-changed", (event) => {
+      const { old_id, ...item } = event.payload;
+      setItems((prev) => {
+        const list = old_id ? prev.filter((i) => i.id !== old_id) : prev;
+        return [item as ClipboardItem, ...list];
+      });
+      setSelectedItem((prev) => prev?.id === old_id ? null : prev);
+    });
 
-    let ulNav: UnlistenFn | undefined;
-    listen<string>("navigate", (event) => {
+    const pNav = listen<string>("navigate", (event) => {
       if (event.payload === "settings") setView("settings");
-    }).then((fn) => { ulNav = fn; });
+    });
 
-    return () => { ulClip?.(); ulNav?.(); };
+    return () => {
+      pClip.then((fn) => fn());
+      pNav.then((fn) => fn());
+    };
   }, []);
 
   // ── Keyboard shortcuts ────────────────────────
@@ -250,6 +258,7 @@ export default function App() {
             onClearAll={handleClearAll}
             onClearOld={handleClearOld}
             onClearImages={handleClearImages}
+            onOpenImage={(path) => invoke("open_image", { path })}
           />
         </div>
 

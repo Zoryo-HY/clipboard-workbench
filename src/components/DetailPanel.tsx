@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Copy, Sparkles, Link, FileCode, Trash2, Star, Download,
   FileText, ExternalLink, FolderOpen,
@@ -32,9 +31,7 @@ export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDel
   if (!item) {
     return (
       <div
-        data-tauri-drag-region
-        onMouseDown={() => getCurrentWindow().startDragging()}
-        className="h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
+        className="h-full flex items-center justify-center"
       >
         <div className="text-center">
           <div className="w-12 h-12 rounded-xl bg-white/[0.02] border border-white/[0.04]
@@ -93,31 +90,53 @@ export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDel
         {/* Image preview */}
         {item.content_type === "image" && (
           <div className="shrink-0 px-4 pb-3">
-            <div className="rounded-lg overflow-hidden border border-white/[0.04] bg-[#0d0f13]">
-              <img
-                src={`https://asset.localhost/${item.content}`}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-                alt="clipboard"
-                className="w-full h-36 object-cover"
-                style={{ display: 'none' }}
-              />
-              <div className="flex items-center justify-center h-20 text-sm text-zinc-500">
-                图片已保存
+            {item.thumbnail ? (
+              <div className="rounded-lg overflow-hidden border border-white/[0.04] bg-[#0d0f13] relative group">
+                <img
+                  src={`data:image/png;base64,${item.thumbnail}`}
+                  alt="clipboard"
+                  className="w-full max-h-48 object-contain cursor-pointer"
+                  onDoubleClick={() => invoke("open_image", { path: fullContent || item.content })}
+                />
+                <div className="absolute bottom-2 right-2 text-[10px] text-zinc-500 bg-black/60 px-1.5 py-0.5 rounded
+                  opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  双击打开原图
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-lg border border-white/[0.04] bg-[#0d0f13]
+                flex items-center justify-center h-20 text-sm text-zinc-500">
+                缩略图不可用 · 双击文件路径打开
+              </div>
+            )}
           </div>
         )}
 
         {/* Content preview */}
         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-3">
-          <div className="p-3 rounded-lg bg-[#0d0f13] border border-white/[0.04]">
-            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words
-              max-h-48 overflow-y-auto custom-scrollbar font-medium">
-              {fullContent || item.content}
-            </p>
-          </div>
+          {item.content_type === "file" ? (
+            <div className="p-3 rounded-lg bg-[#0d0f13] border border-white/[0.04]">
+              <p className="text-sm text-zinc-300 font-medium break-words">
+                {(fullContent || item.content).split("\\").pop()?.split("/").pop() || fullContent || item.content}
+              </p>
+              <p className="text-xs text-zinc-500 mt-1 break-all">
+                {fullContent || item.content}
+              </p>
+            </div>
+          ) : item.content_type === "image" ? (
+            <div className="p-3 rounded-lg bg-[#0d0f13] border border-white/[0.04]">
+              <p className="text-xs text-zinc-500 break-all">
+                {fullContent || item.content}
+              </p>
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg bg-[#0d0f13] border border-white/[0.04]">
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words
+                max-h-48 overflow-y-auto custom-scrollbar font-medium">
+                {fullContent || item.content}
+              </p>
+            </div>
+          )}
 
           {/* URLs */}
           {urls.length > 0 && (

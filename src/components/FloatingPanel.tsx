@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SearchBar } from "./SearchBar";
 import { HistoryItem } from "./HistoryItem";
 import { Trash2, Filter } from "lucide-react";
@@ -16,6 +15,7 @@ interface Props {
   onClearAll: () => void;
   onClearOld: (days: number) => void;
   onClearImages: () => void;
+  onOpenImage: (path: string) => void;
 }
 
 function classifyItem(item: ClipboardItem): CategoryId {
@@ -35,6 +35,7 @@ const categoryLabels: Record<CategoryId, string> = {
 export function FloatingPanel({
   items, category, selectedId, onSelect, onContextMenu,
   onToggleFavorite, onDelete, onClearAll, onClearOld, onClearImages,
+  onOpenImage,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showMenu, setShowMenu] = useState(false);
@@ -58,12 +59,8 @@ export function FloatingPanel({
       {/* Header */}
       <div
         data-tauri-drag-region
-        onMouseDown={(e) => {
-          const t = e.target as HTMLElement;
-          if (t.closest('button, input, a, [role="button"]')) return;
-          getCurrentWindow().startDragging();
-        }}
-        className="shrink-0 px-4 pt-3 pb-2 cursor-grab active:cursor-grabbing"
+        className="shrink-0 px-4 pt-3 pb-2"
+        style={{ cursor: 'default' } as React.CSSProperties}
       >
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-semibold text-zinc-200">
@@ -71,6 +68,16 @@ export function FloatingPanel({
           </h2>
           <div className="flex items-center gap-1">
             <span className="text-xs text-zinc-500 tabular-nums mr-1">{filtered.length} 条</span>
+            {/* Red clear-all button */}
+            <button
+              onClick={() => { if (window.confirm('确定要清空所有历史记录吗？此操作不可撤销。')) onClearAll(); }}
+              className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
+                text-red-400 hover:text-red-300 hover:bg-red-500/8 transition-colors"
+              title="清空所有历史"
+            >
+              <Trash2 className="w-3 h-3" />
+              清空全部
+            </button>
             {/* Bulk cleanup menu */}
             <div className="relative">
               <button
@@ -149,6 +156,11 @@ export function FloatingPanel({
                 onContextMenu={(e) => onContextMenu(e, item)}
                 onToggleFavorite={() => onToggleFavorite(item)}
                 onDelete={() => onDelete(item)}
+                onDoubleClickImage={() => {
+                  if (item.content_type === "image" || item.content_type === "file") {
+                    onOpenImage(item.content);
+                  }
+                }}
               />
             ))}
           </div>
