@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SearchBar } from "./SearchBar";
 import { HistoryItem } from "./HistoryItem";
 import { Trash2, Filter } from "lucide-react";
@@ -55,7 +56,15 @@ export function FloatingPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div data-tauri-drag-region className="shrink-0 px-4 pt-3 pb-2 cursor-grab active:cursor-grabbing">
+      <div
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          const t = e.target as HTMLElement;
+          if (t.closest('button, input, a, [role="button"]')) return;
+          getCurrentWindow().startDragging();
+        }}
+        className="shrink-0 px-4 pt-3 pb-2 cursor-grab active:cursor-grabbing"
+      >
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-base font-semibold text-zinc-200">
             {categoryLabels[category]}

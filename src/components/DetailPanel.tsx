@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Copy, Sparkles, Link, FileCode, Trash2, Star, Download,
   FileText, ExternalLink, FolderOpen,
@@ -30,7 +31,11 @@ const typeLabels: Record<string, string> = {
 export function DetailPanel({ item, fullContent, onCopy, onToggleFavorite, onDelete }: Props) {
   if (!item) {
     return (
-      <div data-tauri-drag-region className="h-full flex items-center justify-center cursor-grab active:cursor-grabbing">
+      <div
+        data-tauri-drag-region
+        onMouseDown={() => getCurrentWindow().startDragging()}
+        className="h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
+      >
         <div className="text-center">
           <div className="w-12 h-12 rounded-xl bg-white/[0.02] border border-white/[0.04]
             flex items-center justify-center mx-auto mb-3">
