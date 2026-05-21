@@ -3,10 +3,13 @@ mod db;
 mod tray;
 
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use sha2::{Sha256, Digest};
 use tauri::Manager;
 
 struct AppState {
     db: Arc<Mutex<rusqlite::Connection>>,
+    last_written: Arc<Mutex<(String, Instant)>>,
 }
 
 #[tauri::command]
@@ -25,8 +28,18 @@ fn get_full_content(state: tauri::State<AppState>, id: i64) -> Result<String, St
 fn copy_to_clipboard(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let content = db::get_item_content(&conn, id).map_err(|e| e.to_string())?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+
     let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    cb.set_text(content).map_err(|e| e.to_string())
+    cb.set_text(&content).map_err(|e| e.to_string())?;
+
+    let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
+    *lw = (hash, Instant::now());
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -101,21 +114,25 @@ pub fn run() {
             db::init(&conn)?;
 
             let db = Arc::new(Mutex::new(conn));
-            app.manage(AppState { db: db.clone() });
+            let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
+
+            app.manage(AppState {
+                db: db.clone(),
+                last_written: last_written.clone(),
+            });
 
             let images_dir = app_data_dir.join("images");
 
             tray::setup(app)?;
 
             let handle = app.handle().clone();
-            clipboard::start_monitoring(db, handle, images_dir);
+            clipboard::start_monitoring(db, handle, images_dir, last_written);
 
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, Modifiers, Code};
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL), Code::Space);
             app.global_shortcut().register(shortcut)
                 .map_err(|e| format!("{}", e))?;
 
-            // Close button hides to tray instead of quitting
             if let Some(window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
                 window.on_window_event(move |event| {

@@ -35,14 +35,12 @@ export function FloatingPanel({ items, category, selectedId, onSelect }: Props) 
   const filtered = useMemo(() => {
     let list = items;
 
-    // Category filter
     if (category === "favorite") {
       list = list.filter((i) => i.is_favorite);
     } else if (category !== "all") {
       list = list.filter((i) => classifyItem(i) === category);
     }
 
-    // Search filter
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((i) => i.content.toLowerCase().includes(q));
@@ -53,10 +51,9 @@ export function FloatingPanel({ items, category, selectedId, onSelect }: Props) 
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="shrink-0 px-3 pt-3 pb-2">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-medium text-zinc-300">
+      <div className="shrink-0 px-3 pt-2 pb-1.5">
+        <div className="flex items-center justify-between mb-1.5">
+          <h2 className="text-[11px] font-medium text-zinc-400">
             {categoryLabels[category]}
           </h2>
           <span className="text-[10px] text-zinc-600 tabular-nums">
@@ -66,23 +63,22 @@ export function FloatingPanel({ items, category, selectedId, onSelect }: Props) 
         <SearchBar value={search} onChange={setSearch} />
       </div>
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-3">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-2">
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2">
-            <div className="w-10 h-10 rounded-2xl bg-white/[0.02] border border-white/[0.04]
+          <div className="flex flex-col items-center justify-center h-full gap-1.5">
+            <div className="w-8 h-8 rounded-lg bg-white/[0.02] border border-white/[0.04]
               flex items-center justify-center">
-              <div className="w-4 h-4 text-zinc-700">—</div>
+              <div className="w-3 h-3 text-zinc-700">—</div>
             </div>
-            <p className="text-xs text-zinc-600">
+            <p className="text-[11px] text-zinc-600">
               {search ? "无匹配结果" : "剪贴板为空"}
             </p>
-            <p className="text-[11px] text-zinc-700">
+            <p className="text-[10px] text-zinc-700">
               {search ? "尝试其他关键词" : "复制内容后自动出现在这里"}
             </p>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {filtered.map((item) => (
               <HistoryItem
                 key={item.id}

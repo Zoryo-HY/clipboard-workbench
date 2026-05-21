@@ -1,12 +1,18 @@
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
+use std::time::Instant;
 use rusqlite::Connection;
 use sha2::{Sha256, Digest};
 use image::ImageEncoder;
 use tauri::{AppHandle, Emitter};
 use crate::db;
 
-pub fn start_monitoring(db: Arc<Mutex<Connection>>, handle: AppHandle, images_dir: PathBuf) {
+pub fn start_monitoring(
+    db: Arc<Mutex<Connection>>,
+    handle: AppHandle,
+    images_dir: PathBuf,
+    last_written: Arc<Mutex<(String, Instant)>>,
+) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(1));
 
@@ -15,35 +21,62 @@ pub fn start_monitoring(db: Arc<Mutex<Connection>>, handle: AppHandle, images_di
         loop {
             std::thread::sleep(std::time::Duration::from_millis(500));
 
-            if let Ok(conn) = db.lock() {
-                let settings = db::get_settings(&conn).unwrap_or(db::Settings {
-                    max_text_length: 10000,
-                    max_image_size_mb: 10,
-                    max_file_size_mb: 50,
-                    total_storage_limit_mb: 500,
-                    auto_clean_days: 30,
-                });
+            // Skip if we just wrote to clipboard ourselves (500ms cooldown)
+            {
+                let lw = last_written.lock().unwrap();
+                if lw.1.elapsed().as_millis() < 500 && !lw.0.is_empty() {
+                    last_hash = lw.0.clone();
+                    continue;
+                }
+            }
 
-                // 1. Try image first
-                if let Ok(img) = arboard::Clipboard::new()
-                    .and_then(|mut cb| cb.get_image())
-                {
-                    if let Some(item) = handle_image(&img, &images_dir, &settings, &conn) {
+            let mut clipboard = match arboard::Clipboard::new() {
+                Ok(cb) => cb,
+                Err(_) => continue,
+            };
+
+            let conn = match db.lock() {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+
+            let settings = db::get_settings(&conn).unwrap_or(db::Settings {
+                max_text_length: 10000,
+                max_image_size_mb: 10,
+                max_file_size_mb: 50,
+                total_storage_limit_mb: 500,
+                auto_clean_days: 30,
+            });
+
+            // Try image first (single clipboard open)
+            if let Ok(img) = clipboard.get_image() {
+                let mut hasher = Sha256::new();
+                hasher.update(&img.bytes);
+                let hash = format!("{:x}", hasher.finalize());
+
+                if hash != last_hash {
+                    if let Some(item) = handle_image(&img, &images_dir, &settings, &conn, &hash) {
+                        last_hash = hash;
                         let _ = handle.emit("clipboard-changed", &item);
-                        last_hash.clear();
-                        continue;
                     }
                 }
+                continue;
+            }
 
-                // 2. Try text (includes file path detection)
-                if let Ok(text) = arboard::Clipboard::new()
-                    .and_then(|mut cb| cb.get_text())
-                {
-                    if text.is_empty() {
-                        continue;
-                    }
+            // Try text
+            if let Ok(text) = clipboard.get_text() {
+                if text.is_empty() {
+                    continue;
+                }
+
+                let mut hasher = Sha256::new();
+                hasher.update(text.as_bytes());
+                let hash = format!("{:x}", hasher.finalize());
+
+                if hash != last_hash {
                     let content_type = classify_text(&text);
-                    if let Some(item) = handle_text(&text, content_type, &settings, &conn, &mut last_hash) {
+                    if let Some(item) = handle_text(&text, content_type, &settings, &conn, &hash) {
+                        last_hash = hash;
                         let _ = handle.emit("clipboard-changed", &item);
                     }
                 }
@@ -57,6 +90,7 @@ fn handle_image(
     images_dir: &PathBuf,
     settings: &db::Settings,
     conn: &Connection,
+    hash: &str,
 ) -> Option<db::ClipboardItem> {
     let size_mb = (img.width * img.height * 4) as f64 / (1024.0 * 1024.0);
     if size_mb > settings.max_image_size_mb as f64 {
@@ -69,7 +103,6 @@ fn handle_image(
     let filename = format!("clipboard_{}.png", timestamp);
     let filepath = images_dir.join(&filename);
 
-    // Save RGBA as PNG using image crate
     let mut png_bytes = Vec::new();
     let encoder = image::codecs::png::PngEncoder::new(&mut png_bytes);
     encoder.write_image(
@@ -81,14 +114,9 @@ fn handle_image(
     std::fs::write(&filepath, &png_bytes).ok()?;
 
     let path_str = filepath.to_string_lossy().to_string();
-
-    let mut hasher = Sha256::new();
-    hasher.update(path_str.as_bytes());
-    let hash = format!("{:x}", hasher.finalize());
-
     let size = std::fs::metadata(&filepath).map(|m| m.len() as i64).unwrap_or(0);
 
-    match db::insert_item(conn, "image", &path_str, &hash, size) {
+    match db::insert_item(conn, "image", &path_str, hash, size) {
         Ok(id) if id > 0 => Some(db::ClipboardItem {
             id,
             content_type: "image".to_string(),
@@ -106,22 +134,13 @@ fn handle_text(
     content_type: &str,
     settings: &db::Settings,
     conn: &Connection,
-    last_hash: &mut String,
+    hash: &str,
 ) -> Option<db::ClipboardItem> {
-    let mut hasher = Sha256::new();
-    hasher.update(text.as_bytes());
-    let hash = format!("{:x}", hasher.finalize());
-
-    if hash == *last_hash {
-        return None;
-    }
-    *last_hash = hash.clone();
-
     let max_len = settings.max_text_length as usize;
     let content: String = text.chars().take(max_len).collect();
     let size = content.len() as i64;
 
-    match db::insert_item(conn, content_type, &content, &hash, size) {
+    match db::insert_item(conn, content_type, &content, hash, size) {
         Ok(id) if id > 0 => Some(db::ClipboardItem {
             id,
             content_type: content_type.to_string(),
@@ -137,7 +156,6 @@ fn handle_text(
 fn classify_text(text: &str) -> &str {
     let trimmed = text.trim();
 
-    // URL
     if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
         && !trimmed.contains('\n')
         && !trimmed.contains(' ')

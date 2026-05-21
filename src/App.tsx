@@ -131,7 +131,7 @@ export default function App() {
       <Titlebar />
       <div className="flex-1 flex min-h-0">
         {/* Left Sidebar */}
-        <div className="w-[170px] shrink-0 border-r border-white/[0.05]">
+        <div className="w-[155px] shrink-0 border-r border-white/[0.04]">
           <Sidebar
             active={category}
             onChange={(id) => {
@@ -148,7 +148,7 @@ export default function App() {
         </div>
 
         {/* Center - History List */}
-        <div className="flex-1 min-w-0 border-r border-white/[0.05]">
+        <div className="flex-1 min-w-0 border-r border-white/[0.04]">
           <AnimatePresence mode="wait">
             <motion.div
               key={category}
@@ -169,7 +169,7 @@ export default function App() {
         </div>
 
         {/* Right - Detail Panel */}
-        <div className="w-[260px] shrink-0">
+        <div className="w-[240px] shrink-0">
           <DetailPanel
             item={selectedItem}
             fullContent={fullContent}

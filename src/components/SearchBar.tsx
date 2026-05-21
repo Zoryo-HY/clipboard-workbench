@@ -8,15 +8,15 @@ interface Props {
 export function SearchBar({ value, onChange }: Props) {
   return (
     <div className="relative">
-      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-600" />
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-zinc-600" />
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="搜索剪贴板..."
-        className="w-full h-8 pl-8 pr-7 bg-white/[0.03] border border-white/[0.05]
-          rounded-lg text-xs text-zinc-300 placeholder:text-zinc-600
-          outline-none ring-0 focus:border-violet-500/30 focus:bg-white/[0.04]
+        className="w-full h-7 pl-7 pr-7 bg-white/[0.02] border border-white/[0.04]
+          rounded-md text-[11px] text-zinc-300 placeholder:text-zinc-600
+          outline-none ring-0 focus:border-violet-500/20 focus:bg-white/[0.03]
           transition-colors"
       />
       {value && (
