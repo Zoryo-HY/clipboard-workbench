@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
 import { FloatingPanel } from "./components/FloatingPanel";
@@ -26,6 +26,7 @@ export default function App() {
     auto_clean_days: 30,
     start_minimized: false,
     storage_path: "",
+    theme: "dark",
   });
 
   // Context menu state
@@ -205,11 +206,13 @@ export default function App() {
     setSettings(s);
   };
 
+  const themeClass = settings.theme === "light" ? "light" : "";
+
   // ── View: Settings ────────────────────────────
 
   if (view === "settings") {
     return (
-      <div className="h-full w-full rounded-xl overflow-hidden shell flex flex-col">
+      <div className={`h-full w-full shell flex flex-col ${themeClass}`}>
         <Titlebar />
         <SettingsPanel
           settings={settings}
@@ -225,12 +228,12 @@ export default function App() {
   const favoriteCount = items.filter((i) => i.is_favorite).length;
 
   return (
-    <div className="h-full w-full rounded-xl overflow-hidden shell flex flex-col">
+    <div className={`h-full w-full shell flex flex-col ${themeClass}`}>
       <Titlebar />
 
       <div className="flex-1 flex min-h-0">
         {/* Left Sidebar — navigation */}
-        <div className="w-[135px] shrink-0 border-r border-white/[0.04]">
+        <div className="w-[135px] shrink-0 bg-surface-0 border-r border-subtle">
           <Sidebar
             active={category}
             onChange={(id) => {
@@ -247,7 +250,7 @@ export default function App() {
         </div>
 
         {/* Center — content stream */}
-        <div className="flex-1 min-w-0 border-r border-white/[0.04]">
+        <div className="flex-1 min-w-0 bg-surface-1 border-r border-subtle">
           <FloatingPanel
             key={category}
             items={items}
@@ -266,7 +269,7 @@ export default function App() {
         </div>
 
         {/* Right — workspace */}
-        <div className="w-[380px] shrink-0">
+        <div className="w-[380px] shrink-0 bg-surface-1">
           <DetailPanel
             item={selectedItem}
             fullContent={fullContent}

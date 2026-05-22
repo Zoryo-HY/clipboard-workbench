@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen, Pencil, Save } from "lucide-react";
+import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen, Pencil, Save, Sun, Moon, Zap } from "lucide-react";
 import { ShortcutCapture } from "./ShortcutCapture";
 import type { Settings } from "../types";
 
@@ -22,11 +22,14 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
   );
   const [startMinimized, setStartMinimized] = useState(settings.start_minimized);
   const [storagePath, setStoragePath] = useState(settings.storage_path);
+  const [theme, setTheme] = useState(settings.theme || "dark");
   const [dataDir, setDataDir] = useState("");
   const [saved, setSaved] = useState(false);
   const [shortcutMod, setShortcutMod] = useState("Control");
   const [shortcutKey, setShortcutKey] = useState("Space");
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [cacheMsg, setCacheMsg] = useState("");
 
   const dirty = useMemo(() => {
     return maxText !== settings.max_text_length
@@ -37,8 +40,9 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       || (autoClean && cleanDays !== (settings.auto_clean_days > 0 ? settings.auto_clean_days : 30))
       || startMinimized !== settings.start_minimized
       || storagePath !== settings.storage_path
+      || theme !== (settings.theme || "dark")
       || shortcutMod !== "Control" || shortcutKey !== "Space";
-  }, [maxText, maxImg, maxFile, storage, autoClean, cleanDays, startMinimized, storagePath, shortcutMod, shortcutKey, settings]);
+  }, [maxText, maxImg, maxFile, storage, autoClean, cleanDays, startMinimized, storagePath, theme, shortcutMod, shortcutKey, settings]);
 
   useEffect(() => {
     invoke<string>("get_data_dir").then(setDataDir).catch(() => {});
@@ -56,6 +60,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       auto_clean_days: autoClean ? cleanDays : 0,
       start_minimized: startMinimized,
       storage_path: storagePath,
+      theme,
     });
     try {
       await invoke("update_shortcut", { modifiers: shortcutMod, key: shortcutKey });
@@ -76,25 +81,20 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      className="flex flex-col flex-1 min-h-0"
-    >
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="shrink-0 px-4 pt-3 pb-2 flex items-center gap-3">
         <button
           onClick={handleBack}
-          className="p-1 -ml-1 rounded-md text-zinc-400 hover:text-zinc-200
-            hover:bg-white/[0.04] transition-colors"
+          className="p-1 -ml-1 rounded text-zinc-500 hover:text-zinc-200
+            hover:bg-surface-3 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="text-base font-semibold text-zinc-200 flex-1">设置</h1>
+        <h1 className="text-[14px] font-semibold text-zinc-200 flex-1">设置</h1>
         {dirty && (
           <button
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-medium
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[13px] font-medium
               text-violet-300 bg-violet-500/15 border border-violet-500/20
               hover:bg-violet-500/20 transition-colors"
           >
@@ -104,13 +104,13 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 space-y-4 pb-4">
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 space-y-3 pb-4">
         {/* Storage */}
         <Section icon={HardDrive} title="存储限制">
           <SliderRow label="文本长度限制" value={maxText} min={500} max={50000} step={500} unit="字" onChange={setMaxText} />
           <SliderRow label="图片大小限制" value={maxImg} min={1} max={50} step={1} unit="MB" onChange={setMaxImg} />
           <SliderRow label="文件大小限制" value={maxFile} min={1} max={200} step={5} unit="MB" onChange={setMaxFile} />
-          <div className="mt-2 pt-3 border-t border-white/[0.04]">
+          <div className="mt-2 pt-3 border-t border-[#2D2D2D]">
             <SliderRow label="总存储空间" value={storage} min={50} max={2000} step={50} unit="MB" onChange={setStorage} />
           </div>
         </Section>
@@ -119,19 +119,19 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         <Section icon={FolderOpen} title="存储位置">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm text-zinc-400">当前路径</label>
+              <label className="text-[13px] text-zinc-400">当前路径</label>
               <button
                 onClick={() => invoke("open_data_dir").catch(console.error)}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs
-                  text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]
-                  border border-white/[0.04] transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs
+                  text-zinc-400 hover:text-zinc-200 hover:bg-surface-2
+                  border border-subtle transition-colors"
                 title="在资源管理器中打开"
               >
                 打开文件夹
               </button>
             </div>
-            <p className="text-xs text-zinc-500 break-all bg-[#0d0f13] px-3 py-2 rounded-md
-              border border-white/[0.04] font-mono">
+            <p className="text-xs text-zinc-500 break-all bg-surface-0 px-3 py-2 rounded
+              border border-subtle font-mono">
               {dataDir || "（默认）"}
             </p>
             <div className="flex gap-2">
@@ -140,18 +140,18 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
                 value={storagePath}
                 onChange={(e) => setStoragePath(e.target.value)}
                 placeholder="留空使用默认位置"
-                className="flex-1 h-8 px-2.5 bg-white/[0.03] border border-white/[0.04]
-                  rounded-md text-sm text-zinc-300 placeholder:text-zinc-600
-                  outline-none focus:border-violet-500/20"
+                className="flex-1 h-8 px-2.5 bg-surface-2 border border-subtle
+                  rounded text-sm text-zinc-300 placeholder:text-zinc-600
+                  outline-none focus:border-violet-500/30"
               />
               <button
                 onClick={async () => {
                   const folder = await invoke<string | null>("pick_folder");
                   if (folder) setStoragePath(folder);
                 }}
-                className="shrink-0 px-3 h-8 rounded-md text-sm font-medium
-                  text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.04]
-                  border border-white/[0.04] transition-colors"
+                className="shrink-0 px-3 h-8 rounded text-sm font-medium
+                  text-zinc-400 hover:text-zinc-200 hover:bg-surface-2
+                  border border-subtle transition-colors"
               >
                 浏览
               </button>
@@ -180,24 +180,24 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         {/* Shortcut */}
         <Section icon={Keyboard} title="快捷键">
           <div className="space-y-2">
-            <label className="text-sm text-zinc-400">呼出/收起窗口</label>
+            <label className="text-[13px] text-zinc-400">呼出/收起窗口</label>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 {shortcutMod.split("+").map((m) => (
-                  <kbd key={m} className="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]
+                  <kbd key={m} className="px-2 py-1 rounded bg-surface-2 border border-subtle
                     text-sm text-zinc-300 font-mono font-medium">
                     {m === "Control" ? "Ctrl" : m === "Super" ? "Win" : m}
                   </kbd>
                 ))}
                 <span className="text-zinc-500 text-sm">+</span>
-                <kbd className="px-2 py-1 rounded-md bg-white/[0.04] border border-white/[0.06]
+                <kbd className="px-2 py-1 rounded bg-surface-2 border border-subtle
                   text-sm text-zinc-300 font-mono font-medium">
                   {shortcutKey}
                 </kbd>
               </div>
               <button
                 onClick={() => setCaptureOpen(true)}
-                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium
+                className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
                   text-violet-400 hover:text-violet-300 hover:bg-violet-500/10
                   border border-violet-500/15 transition-colors"
               >
@@ -235,23 +235,66 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         {/* Theme */}
         <Section icon={Monitor} title="外观">
           <div className="space-y-2">
-            <label className="text-sm text-zinc-400">主题</label>
+            <label className="text-[13px] text-zinc-400">主题</label>
             <div className="flex gap-2">
-              <div className="px-3 py-1.5 rounded-md bg-violet-500/10 border border-violet-500/15
-                text-sm text-violet-300 font-medium">深色</div>
-              <div className="px-3 py-1.5 rounded-md bg-white/[0.02] border border-white/[0.04]
-                text-sm text-zinc-600 cursor-not-allowed">浅色 (即将推出)</div>
+              <button
+                onClick={() => setTheme("dark")}
+                className={`theme-option flex items-center gap-2 ${theme === "dark" ? "active" : ""}`}
+              >
+                <Moon className="w-4 h-4" />
+                深色
+              </button>
+              <button
+                onClick={() => setTheme("light")}
+                className={`theme-option flex items-center gap-2 ${theme === "light" ? "active" : ""}`}
+              >
+                <Sun className="w-4 h-4" />
+                浅色
+              </button>
             </div>
+          </div>
+        </Section>
+
+        {/* Clear cache */}
+        <Section icon={Zap} title="缓存管理">
+          <div className="space-y-2">
+            <p className="text-[13px] text-zinc-400">
+              清理未被引用的图片缓存文件，释放磁盘空间
+            </p>
+            <button
+              onClick={async () => {
+                setClearing(true);
+                try {
+                  const msg = await invoke<string>("clear_cache");
+                  setCacheMsg(msg);
+                  setTimeout(() => setCacheMsg(""), 2000);
+                } catch (e) {
+                  setCacheMsg("清理失败: " + e);
+                } finally {
+                  setClearing(false);
+                }
+              }}
+              disabled={clearing}
+              className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium
+                text-amber-400 bg-amber-500/10 border border-amber-500/15
+                hover:bg-amber-500/15 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {clearing ? "清理中..." : cacheMsg || "清理缓存"}
+            </button>
+            {cacheMsg && (
+              <p className="text-xs text-emerald-400">{cacheMsg}</p>
+            )}
           </div>
         </Section>
 
         {/* Save */}
         <button
           onClick={handleSave}
-          className={`w-full h-10 rounded-lg text-sm font-semibold transition-colors ${
+          className={`w-full h-10 rounded text-sm font-semibold transition-colors ${
             saved
-              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/15"
-              : "bg-violet-500/10 text-violet-300 border border-violet-500/15 hover:bg-violet-500/15"
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+              : "bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:bg-violet-500/15"
           }`}
         >
           {saved ? "已保存" : "保存设置"}
@@ -261,7 +304,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
           Clipboard Workbench v0.1.0
         </p>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -269,10 +312,10 @@ function Section({ icon: Icon, title, children }: {
   icon: typeof HardDrive; title: string; children: React.ReactNode;
 }) {
   return (
-    <div className="p-4 rounded-lg card">
+    <div className="p-4 rounded bg-surface-2 border border-subtle">
       <div className="flex items-center gap-2.5 mb-3">
         <Icon className="w-4 h-4 text-zinc-400" />
-        <h3 className="text-sm font-semibold text-zinc-300">{title}</h3>
+        <h3 className="text-[13px] font-semibold text-zinc-300">{title}</h3>
       </div>
       <div className="space-y-3">{children}</div>
     </div>
@@ -286,8 +329,8 @@ function SliderRow({ label, value, min, max, step, unit, onChange }: {
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <label className="text-sm text-zinc-400">{label}</label>
-        <span className="text-sm text-zinc-300 tabular-nums font-medium">
+        <label className="text-[13px] text-zinc-400">{label}</label>
+        <span className="text-[13px] text-zinc-300 tabular-nums font-medium">
           {value.toLocaleString()} {unit}
         </span>
       </div>
@@ -305,7 +348,7 @@ function ToggleRow({ label, description, checked, onChange }: {
   return (
     <div className="flex items-center justify-between">
       <div>
-        <p className="text-sm text-zinc-300 font-medium">{label}</p>
+        <p className="text-[13px] text-zinc-300 font-medium">{label}</p>
         <p className="text-xs text-zinc-500 mt-0.5">{description}</p>
       </div>
       <div className={`toggle-track ${checked ? "active" : ""}`} onClick={() => onChange(!checked)}>

@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { FileText, Link, Image, File, Code2, Star, Settings, Clipboard } from "lucide-react";
 import type { CategoryId } from "../types";
 
@@ -20,18 +19,14 @@ const categories: { id: CategoryId; label: string; icon: typeof Clipboard }[] = 
 
 export function Sidebar({ active, onChange, favoriteCount, onOpenSettings }: Props) {
   return (
-    <div className="flex flex-col h-full py-3">
+    <div className="flex flex-col h-full">
       {/* Logo */}
-      <div
-        data-tauri-drag-region
-        className="px-3 pb-3"
-        style={{ cursor: 'default' } as React.CSSProperties}
-      >
+      <div className="px-4 pt-3 pb-3">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-violet-500/15 flex items-center justify-center">
-            <div className="w-2 h-2 rounded-full bg-violet-400" />
+          <div className="w-5 h-5 rounded-sm bg-violet-500/80 flex items-center justify-center">
+            <div className="w-2 h-2 rounded-sm bg-white" />
           </div>
-          <span className="text-sm font-semibold text-zinc-300 tracking-wide">工作台</span>
+          <span className="text-[13px] font-semibold text-zinc-300">工作台</span>
         </div>
       </div>
 
@@ -41,36 +36,34 @@ export function Sidebar({ active, onChange, favoriteCount, onOpenSettings }: Pro
           const Icon = cat.icon;
           const isActive = active === cat.id;
           return (
-            <motion.button
+            <button
               key={cat.id}
-              whileTap={{ scale: 0.97 }}
               onClick={() => onChange(cat.id)}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm
+              className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[13px]
                 font-medium transition-colors ${
                   isActive
-                    ? "bg-violet-500/10 text-violet-300 border border-violet-500/15"
-                    : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03] border border-transparent"
+                    ? "bg-surface-2 text-zinc-200 border-l-[2px] border-l-violet-500"
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] border-l-[2px] border-l-transparent"
                 }`}
             >
               <Icon className={`w-4 h-4 ${isActive ? "text-violet-400" : "text-zinc-500"}`} />
               <span>{cat.label}</span>
-            </motion.button>
+            </button>
           );
         })}
       </div>
 
       {/* Bottom */}
-      <div className="mt-auto px-2 pt-2 space-y-0.5">
-        <div className="mx-2 mb-1.5 h-px bg-white/[0.04]" />
+      <div className="mt-auto px-2 pt-2 pb-3">
+        <div className="mx-2 mb-1.5 h-px bg-[#2D2D2D]" />
 
-        <motion.button
-          whileTap={{ scale: 0.97 }}
+        <button
           onClick={() => onChange("favorite")}
-          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm
+          className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[13px]
             font-medium transition-colors ${
               active === "favorite"
-                ? "bg-amber-500/10 text-amber-300 border border-amber-500/15"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03] border border-transparent"
+                ? "bg-surface-2 text-zinc-200 border-l-[2px] border-l-amber-500"
+                : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] border-l-[2px] border-l-transparent"
             }`}
         >
           <Star className={`w-4 h-4 ${active === "favorite" ? "text-amber-400" : "text-zinc-500"}`} />
@@ -80,18 +73,17 @@ export function Sidebar({ active, onChange, favoriteCount, onOpenSettings }: Pro
               {favoriteCount}
             </span>
           )}
-        </motion.button>
+        </button>
 
-        <motion.button
-          whileTap={{ scale: 0.97 }}
+        <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm
-            font-medium text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]
-            transition-colors border border-transparent"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded text-[13px]
+            font-medium text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]
+            transition-colors border-l-[2px] border-l-transparent"
         >
           <Settings className="w-4 h-4 text-zinc-500" />
           <span>设置</span>
-        </motion.button>
+        </button>
       </div>
     </div>
   );

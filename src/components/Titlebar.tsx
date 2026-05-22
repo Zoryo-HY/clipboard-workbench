@@ -15,47 +15,21 @@ export const Titlebar: React.FC = () => {
     return () => { unlisten.then((fn: () => void) => fn()); };
   }, []);
 
-  const btnBase: React.CSSProperties = {
-    width: 36,
-    height: 28,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: 'none',
-    background: 'transparent',
-    color: '#888',
-    cursor: 'pointer',
-    borderRadius: 4,
-    transition: 'background 0.15s, color 0.15s',
-  };
-
   return (
     <div
-      style={{
-        height: '32px',
-        width: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        background: 'transparent',
-        position: 'relative',
-        zIndex: 100,
-      }}
+      className="flex items-center w-full shrink-0 bg-surface-0 relative z-[100]"
+      style={{ height: 32 }}
     >
       {/* Drag region */}
       <div
         data-tauri-drag-region
-        style={{
-          flex: 1,
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          WebkitAppRegion: 'drag',
-          msAppRegion: 'drag',
-          cursor: 'default',
-        } as React.CSSProperties}
+        className="flex-1 h-full flex items-center justify-center"
+        style={{ cursor: 'default', WebkitAppRegion: 'drag', msAppRegion: 'drag' } as React.CSSProperties}
       >
-        <span style={{ color: '#888', fontSize: '12px', userSelect: 'none', pointerEvents: 'none' }}>
+        <span
+          className="text-[12px] font-medium select-none pointer-events-none"
+          style={{ color: 'var(--titlebar-text)' }}
+        >
           Clipboard Workbench
         </span>
       </div>
@@ -63,38 +37,21 @@ export const Titlebar: React.FC = () => {
       {/* Mini window switch */}
       <button
         onClick={() => invoke('switch_to_mini')}
-        style={btnBase}
+        className="titlebar-btn"
         title="切换到小窗口"
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.color = '#a78bfa'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
       >
         <PanelRight size={14} />
       </button>
 
-      {/* Window controls — using invoke for reliability */}
-      <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingRight: 4 }}>
-        <button
-          onClick={() => { console.log('minimize clicked'); invoke('minimize_window'); }}
-          style={btnBase}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#ccc'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
-        >
+      {/* Window controls */}
+      <div className="flex items-center h-full pr-1">
+        <button onClick={() => invoke('minimize_window')} className="titlebar-btn">
           <Minus size={14} />
         </button>
-        <button
-          onClick={() => { console.log('maximize clicked'); invoke('toggle_maximize_window'); }}
-          style={btnBase}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#ccc'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
-        >
+        <button onClick={() => invoke('toggle_maximize_window')} className="titlebar-btn">
           {isMaximized ? <Copy size={12} /> : <Square size={12} />}
         </button>
-        <button
-          onClick={() => { console.log('close clicked'); invoke('close_window'); }}
-          style={btnBase}
-          onMouseEnter={(e) => { e.currentTarget.style.background = '#e81123'; e.currentTarget.style.color = '#fff'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
-        >
+        <button onClick={() => invoke('close_window')} className="titlebar-btn titlebar-btn-close">
           <X size={15} />
         </button>
       </div>

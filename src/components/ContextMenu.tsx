@@ -35,7 +35,6 @@ export function ContextMenu({ x, y, item, actions, onClose }: Props) {
     };
   }, [onClose]);
 
-  // Keep menu within viewport
   const menuW = 160;
   const menuH = actions.length * 32 + 16;
   const adjX = Math.min(x, window.innerWidth - menuW - 8);
@@ -44,16 +43,16 @@ export function ContextMenu({ x, y, item, actions, onClose }: Props) {
   return (
     <div
       ref={ref}
-      className="context-menu-enter fixed z-50 py-1.5 rounded-lg border border-white/[0.06]"
+      className="context-menu-enter fixed z-50 py-1.5 rounded border border-subtle"
       style={{
         left: adjX,
         top: adjY,
-        background: "#1d2128",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.3)",
+        background: "#2D2D2E",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
         minWidth: menuW,
       }}
     >
-      <div className="px-2 pb-1.5 mb-1 border-b border-white/[0.04]">
+      <div className="px-2 pb-1.5 mb-1 border-b border-[#3D3D3D]">
         <p className="text-xs text-zinc-400 truncate px-1">
           {item.content.slice(0, 40)}
         </p>
@@ -62,10 +61,10 @@ export function ContextMenu({ x, y, item, actions, onClose }: Props) {
         <button
           key={i}
           onClick={() => { action.onClick(); onClose(); }}
-          className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
+          className={`w-full text-left px-3 py-1.5 text-[13px] transition-colors ${
             action.danger
               ? "text-red-400 hover:bg-red-500/10"
-              : "text-zinc-300 hover:bg-white/[0.04]"
+              : "text-zinc-300 hover:bg-white/[0.06]"
           }`}
         >
           {action.label}

@@ -59,45 +59,41 @@ export function FloatingPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div
-        data-tauri-drag-region
-        className="shrink-0 px-4 pt-3 pb-2"
-        style={{ cursor: 'default' } as React.CSSProperties}
-      >
+      <div className="shrink-0 px-4 pt-3 pb-2">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base font-semibold text-zinc-200">
+          <h2 className="text-[14px] font-semibold text-zinc-200">
             {categoryLabels[category]}
           </h2>
           <div className="flex items-center gap-1">
             <span className="text-xs text-zinc-500 tabular-nums mr-1">{filtered.length} 条</span>
-            {/* Screenshot — core action */}
+            {/* Screenshot */}
             <button
               onClick={async () => {
                 try { await invoke("take_screenshot"); } catch (e) { console.error(e); }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[13px] font-semibold
-                text-violet-400 hover:text-violet-200 hover:bg-violet-500/15
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[13px] font-medium
+                text-violet-400 hover:text-violet-300 hover:bg-violet-500/12
                 border border-violet-500/20 transition-colors"
               title="截图"
             >
               <Camera className="w-4 h-4" />
               <span>截图</span>
             </button>
-            {/* Red clear-all button */}
+            {/* Clear all */}
             <button
               onClick={() => { if (window.confirm('确定要清空所有历史记录吗？此操作不可撤销。')) onClearAll(); }}
               className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
-                text-red-400 hover:text-red-300 hover:bg-red-500/8 transition-colors"
+                text-zinc-500 hover:text-red-400 hover:bg-red-500/8 transition-colors"
               title="清空所有历史"
             >
               <Trash2 className="w-3 h-3" />
               清空全部
             </button>
-            {/* Bulk cleanup menu */}
+            {/* Bulk menu */}
             <div className="relative">
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors"
+                className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-surface-2 transition-colors"
                 title="批量清理"
               >
                 <Filter className="w-3.5 h-3.5" />
@@ -105,33 +101,33 @@ export function FloatingPanel({
               {showMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-                  <div className="absolute right-0 top-full mt-1 z-50 w-40 py-1 rounded-lg
-                    border border-white/[0.06] bg-[#1d2128] shadow-xl"
+                  <div className="absolute right-0 top-full mt-1 z-50 w-40 py-1 rounded
+                    border border-subtle bg-surface-3 shadow-lg"
                   >
                     <button
                       onClick={() => { onClearOld(7); setShowMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/[0.04]"
+                      className="w-full text-left px-3 py-1.5 text-[13px] text-zinc-300 hover:bg-white/[0.06]"
                     >
                       清空 7 天前
                     </button>
                     <button
                       onClick={() => { onClearOld(30); setShowMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/[0.04]"
+                      className="w-full text-left px-3 py-1.5 text-[13px] text-zinc-300 hover:bg-white/[0.06]"
                     >
                       清空 30 天前
                     </button>
                     {category === "image" && (
                       <button
                         onClick={() => { onClearImages(); setShowMenu(false); }}
-                        className="w-full text-left px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/[0.04]"
+                        className="w-full text-left px-3 py-1.5 text-[13px] text-zinc-300 hover:bg-white/[0.06]"
                       >
                         清空图片
                       </button>
                     )}
-                    <div className="mx-2 my-1 h-px bg-white/[0.04]" />
+                    <div className="mx-2 my-1 h-px bg-[#2D2D2D]" />
                     <button
                       onClick={() => { onClearAll(); setShowMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/8 flex items-center gap-2"
+                      className="w-full text-left px-3 py-1.5 text-[13px] text-red-400 hover:bg-red-500/8 flex items-center gap-2"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       清空全部
@@ -149,11 +145,11 @@ export function FloatingPanel({
       <div className="flex-1 overflow-y-auto custom-scrollbar px-3 pb-3">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-2">
-            <div className="w-10 h-10 rounded-lg bg-white/[0.02] border border-white/[0.04]
+            <div className="w-10 h-10 rounded bg-surface-2 border border-subtle
               flex items-center justify-center">
-              <div className="text-zinc-600 text-lg">—</div>
+              <div className="text-zinc-600 text-sm">—</div>
             </div>
-            <p className="text-sm text-zinc-500">
+            <p className="text-[13px] text-zinc-500">
               {search ? "无匹配结果" : "剪贴板为空"}
             </p>
             <p className="text-xs text-zinc-600">

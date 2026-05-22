@@ -10,6 +10,7 @@ use tauri::{Manager, Emitter};
 pub struct AppState {
     db: Arc<Mutex<rusqlite::Connection>>,
     last_written: Arc<Mutex<(String, Instant)>>,
+    last_hash: Arc<Mutex<String>>,
     data_dir: std::path::PathBuf,
     default_data_dir: std::path::PathBuf,
     last_active_label: Arc<Mutex<String>>,
@@ -109,6 +110,17 @@ fn delete_item(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
         let _ = std::fs::remove_file(&content);
     }
 
+    // Set last_hash to deleted content so monitor skips it
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    if let Ok(mut lw) = state.last_written.lock() {
+        *lw = (hash.clone(), Instant::now());
+    }
+    if let Ok(mut lh) = state.last_hash.lock() {
+        *lh = hash;
+    }
+
     Ok(())
 }
 
@@ -121,7 +133,58 @@ fn clear_history(state: tauri::State<AppState>) -> Result<(), String> {
     for path in &image_paths {
         let _ = std::fs::remove_file(path);
     }
+    // Clear monitor hash so clipboard content can be re-detected
+    if let Ok(mut lh) = state.last_hash.lock() {
+        *lh = String::new();
+    }
+    if let Ok(mut lw) = state.last_written.lock() {
+        *lw = (String::new(), Instant::now());
+    }
     Ok(())
+}
+
+#[tauri::command]
+fn clear_cache(state: tauri::State<AppState>) -> Result<String, String> {
+    let mut total_freed: u64 = 0;
+    let images_dir = state.data_dir.join("images");
+
+    // Delete image files not referenced by any DB record
+    if images_dir.exists() {
+        if let Ok(conn) = state.db.lock() {
+            // Get all image paths currently in DB
+            let mut stmt = conn.prepare(
+                "SELECT content FROM clipboard_items WHERE content_type = 'image'"
+            ).map_err(|e| e.to_string())?;
+            let db_paths: Vec<String> = stmt.query_map([], |row| row.get(0))
+                .map_err(|e| e.to_string())?
+                .filter_map(|r| r.ok())
+                .collect();
+
+            // Scan images directory for orphans
+            if let Ok(entries) = std::fs::read_dir(&images_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_file() {
+                        let path_str = path.to_string_lossy().to_string();
+                        if !db_paths.iter().any(|p| p == &path_str) {
+                            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                            if std::fs::remove_file(&path).is_ok() {
+                                total_freed += size;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let msg = if total_freed > 0 {
+        let mb = total_freed as f64 / (1024.0 * 1024.0);
+        format!("已清理 {:.1} MB 缓存", mb)
+    } else {
+        "无需清理，缓存已是最新状态".into()
+    };
+    Ok(msg)
 }
 
 #[tauri::command]
@@ -143,7 +206,7 @@ fn get_settings(state: tauri::State<AppState>) -> Result<db::Settings, String> {
 }
 
 #[tauri::command]
-fn update_settings(state: tauri::State<AppState>, settings: db::Settings) -> Result<(), String> {
+fn update_settings(app: tauri::AppHandle, state: tauri::State<AppState>, settings: db::Settings) -> Result<(), String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     db::update_settings(&conn, &settings).map_err(|e| e.to_string())?;
 
@@ -160,6 +223,7 @@ fn update_settings(state: tauri::State<AppState>, settings: db::Settings) -> Res
     if let Err(e) = std::fs::write(&config_path, settings.storage_path.trim()) {
         let _ = std::fs::write(&log_path, format!("{}ERROR: {}\n", log_msg, e));
     }
+    let _ = app.emit("settings-changed", &settings);
     Ok(())
 }
 
@@ -291,6 +355,11 @@ fn toggle_active_window(state: tauri::State<AppState>, app: tauri::AppHandle) ->
 
 #[tauri::command]
 fn clear_item(state: tauri::State<AppState>, app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    // Get content before clearing so we can compute hash
+    let content = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        db::get_item_content(&conn, id).map_err(|e| e.to_string())?
+    };
     let deleted_file = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::clear_item(&conn, id).map_err(|e| e.to_string())?
@@ -298,6 +367,16 @@ fn clear_item(state: tauri::State<AppState>, app: tauri::AppHandle, id: i64) -> 
     if let Some(path) = deleted_file {
         let _ = std::fs::remove_file(&path);
         eprintln!("[clear_item] deleted cached file: {}", path);
+    }
+    // Set last_hash to cleared content so monitor skips it
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    if let Ok(mut lw) = state.last_written.lock() {
+        *lw = (hash.clone(), Instant::now());
+    }
+    if let Ok(mut lh) = state.last_hash.lock() {
+        *lh = hash;
     }
     let item = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
@@ -454,11 +533,13 @@ pub fn run() {
 
             let db = Arc::new(Mutex::new(conn));
             let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
+            let last_hash = Arc::new(Mutex::new(String::new()));
             let last_active_label = Arc::new(Mutex::new("main".to_string()));
 
             app.manage(AppState {
                 db: db.clone(),
                 last_written: last_written.clone(),
+                last_hash: last_hash.clone(),
                 data_dir: data_dir.clone(),
                 default_data_dir: default_data_dir.clone(),
                 last_active_label: last_active_label.clone(),
@@ -470,7 +551,7 @@ pub fn run() {
             tray::setup(app)?;
 
             let handle = app.handle().clone();
-            clipboard::start_monitoring(db.clone(), handle, images_dir, last_written);
+            clipboard::start_monitoring(db.clone(), handle, images_dir, last_written, last_hash);
 
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
             let sc = {
@@ -531,6 +612,7 @@ pub fn run() {
             toggle_favorite,
             delete_item,
             clear_history,
+            clear_cache,
             get_settings,
             update_settings,
             minimize_window,

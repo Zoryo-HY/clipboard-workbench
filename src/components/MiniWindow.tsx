@@ -5,7 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion, AnimatePresence } from "framer-motion";
 import { Camera, Trash2, Copy, ClipboardList, Check, Maximize2 } from "lucide-react";
 import { TextViewer } from "./TextViewer";
-import type { ClipboardItem } from "../types";
+import type { ClipboardItem, Settings } from "../types";
 
 type Toast = { id: number; msg: string };
 
@@ -14,6 +14,7 @@ export function MiniWindow() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingText, setViewingText] = useState<ClipboardItem | null>(null);
+  const [theme, setTheme] = useState("dark");
   const toastIdRef = useRef(0);
   const appWindow = getCurrentWindow();
 
@@ -26,7 +27,6 @@ export function MiniWindow() {
   const loadItems = useCallback(async () => {
     try {
       const data = await invoke<ClipboardItem[]>("get_history", { limit: 30, offset: 0 });
-      console.log("[mini] loaded", data.length, "items");
       setItems(data);
     } catch (e) {
       console.error("[mini] load failed:", e);
@@ -37,12 +37,17 @@ export function MiniWindow() {
 
   useEffect(() => { loadItems(); }, [loadItems]);
 
+  const syncTheme = useCallback(() => {
+    invoke<Settings>("get_settings").then(s => setTheme(s.theme || "dark")).catch(() => {});
+  }, []);
+
+  useEffect(() => { syncTheme(); }, [syncTheme]);
+
   useEffect(() => {
     let mounted = true;
     const pClip = listen<ClipboardItem>("clipboard-changed", (event) => {
       if (!mounted) return;
       const item = event.payload;
-      console.log("[mini] clipboard-changed id=", item.id, "type=", item.content_type);
       setItems((prev) => {
         const list = prev.filter((i) => i.id !== item.id);
         return [item, ...list].slice(0, 30);
@@ -51,16 +56,26 @@ export function MiniWindow() {
 
     const pCleared = listen<ClipboardItem>("item-cleared", (event) => {
       if (!mounted) return;
-      console.log("[mini] item-cleared id=", event.payload.id);
       setItems((prev) => prev.map((i) => i.id === event.payload.id ? event.payload : i));
     });
+
+    const pSettings = listen<Settings>("settings-changed", (event) => {
+      if (!mounted) return;
+      setTheme(event.payload.theme || "dark");
+    });
+
+    // Sync theme whenever window gains focus (belt-and-suspenders)
+    const onFocus = () => { syncTheme(); };
+    window.addEventListener('focus', onFocus);
 
     return () => {
       mounted = false;
       pClip.then((fn) => fn());
       pCleared.then((fn) => fn());
+      pSettings.then((fn) => fn());
+      window.removeEventListener('focus', onFocus);
     };
-  }, []);
+  }, [syncTheme]);
 
   const handleCopy = async (item: ClipboardItem) => {
     try { await invoke("copy_to_clipboard", { id: item.id }); showToast("已复制"); }
@@ -121,79 +136,34 @@ export function MiniWindow() {
     }
   };
 
-  // ── Render ──
-
   return (
-    <div className="flex flex-col h-full w-full bg-[#111318]">
-      {/* ═══ TITLEBAR — EXACT copy of working Titlebar.tsx pattern ═══ */}
-      <div
-        style={{
-          height: '32px',
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          background: 'transparent',
-          position: 'relative',
-          zIndex: 100,
-        }}
-      >
-        {/* Drag region: data-tauri-drag-region + vendor prefixes + startDragging fallback */}
+    <div className={`flex flex-col h-full w-full bg-surface-0 ${theme === "light" ? "light" : ""}`}>
+      {/* Titlebar */}
+      <div className="flex items-center w-full bg-surface-0 relative z-[100]" style={{ height: 32 }}>
         <div
           data-tauri-drag-region
-          onMouseDown={(e) => {
-            // Only start drag on left button direct hit (not on children)
-            if (e.button === 0 && e.target === e.currentTarget) {
-              appWindow.startDragging().catch(() => {});
-            }
-          }}
-          style={{
-            flex: 1,
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            WebkitAppRegion: 'drag',
-            msAppRegion: 'drag',
-            cursor: 'default',
-          } as React.CSSProperties}
+          className="flex-1 h-full flex items-center justify-center"
+          style={{ cursor: 'default', WebkitAppRegion: 'drag', msAppRegion: 'drag' } as React.CSSProperties}
         >
-          <span style={{ color: '#888', fontSize: '12px', userSelect: 'none', pointerEvents: 'none' }}>
+          <span
+            className="text-[12px] select-none pointer-events-none"
+            style={{ color: 'var(--titlebar-text)' }}
+          >
             Clipboard Mini
           </span>
         </div>
 
-        {/* Buttons: siblings OUTSIDE drag region (exactly like Titlebar) */}
-        <div style={{ display: 'flex', alignItems: 'center', height: '100%', paddingRight: 4 }}>
-          <button
-            onClick={handleScreenshot}
-            style={{
-              width: 36, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: 'none', background: 'transparent', color: '#888', cursor: 'pointer',
-              borderRadius: 4, transition: 'background 0.15s, color 0.15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.color = '#a78bfa'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
-            title="截图"
-          >
+        <div className="flex items-center h-full pr-1">
+          <button onClick={handleScreenshot} className="titlebar-btn" title="截图">
             <Camera size={14} />
           </button>
-          <button
-            onClick={() => invoke("switch_to_main")}
-            style={{
-              width: 36, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: 'none', background: 'transparent', color: '#888', cursor: 'pointer',
-              borderRadius: 4, transition: 'background 0.15s, color 0.15s',
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.color = '#a78bfa'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#888'; }}
-            title="切换到主窗口"
-          >
+          <button onClick={() => invoke("switch_to_main")} className="titlebar-btn" title="切换到主窗口">
             <Maximize2 size={14} />
           </button>
         </div>
       </div>
 
-      {/* ═══ LIST ═══ */}
+      {/* List */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading ? (
           <div className="flex items-center justify-center h-full">
@@ -217,11 +187,11 @@ export function MiniWindow() {
                   transition={{ duration: 0.12 }}
                   onDoubleClick={() => handleItemDoubleClick(item)}
                   className="group flex items-center gap-3 px-4 py-2.5
-                    hover:bg-white/[0.04] transition-colors border-b border-white/[0.02]"
+                    hover:bg-white/[0.03] transition-colors border-b border-[#2D2D2D]"
                 >
                   {/* Thumbnail */}
                   <div
-                    className="w-9 h-9 shrink-0 rounded-lg bg-white/[0.03] border border-white/[0.05]
+                    className="w-9 h-9 shrink-0 rounded bg-surface-2 border border-subtle
                       flex items-center justify-center overflow-hidden"
                   >
                     {item.content_type === "image" && item.thumbnail && !item.is_cleared ? (
@@ -249,11 +219,11 @@ export function MiniWindow() {
                     </p>
                   </div>
 
-                  {/* Hover actions — copy + clear */}
+                  {/* Hover actions */}
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleCopy(item); }}
-                      className="p-1.5 rounded-md text-zinc-400 hover:text-violet-400 hover:bg-white/[0.06]
+                      className="p-1.5 rounded text-zinc-500 hover:text-violet-400 hover:bg-surface-3
                         cursor-pointer"
                       title="复制"
                     >
@@ -261,7 +231,7 @@ export function MiniWindow() {
                     </button>
                     <button
                       onClick={(e) => handleClear(item, e)}
-                      className="p-1.5 rounded-md text-zinc-500 hover:text-red-400 hover:bg-red-500/10
+                      className="p-1.5 rounded text-zinc-600 hover:text-red-400 hover:bg-red-500/10
                         cursor-pointer"
                       title="清除缓存"
                     >
@@ -275,20 +245,20 @@ export function MiniWindow() {
         )}
       </div>
 
-      {/* ═══ FOOTER ═══ */}
-      <div className="shrink-0 px-4 py-1.5 border-t border-white/[0.04] flex items-center justify-between">
+      {/* Footer */}
+      <div className="shrink-0 px-4 py-1.5 border-t border-[#2D2D2D] flex items-center justify-between">
         <span className="text-[11px] text-zinc-500">双击查看 · 悬停操作</span>
         <span className="text-[11px] text-zinc-600">{items.length} 条记录</span>
       </div>
 
-      {/* ═══ Text viewer modal ═══ */}
+      {/* Text viewer modal */}
       <AnimatePresence>
         {viewingText && (
           <TextViewer item={viewingText} onClose={() => setViewingText(null)} />
         )}
       </AnimatePresence>
 
-      {/* ═══ Toasts ═══ */}
+      {/* Toasts */}
       <div className="fixed bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 pointer-events-none z-50">
         {toasts.map((t) => (
           <motion.div

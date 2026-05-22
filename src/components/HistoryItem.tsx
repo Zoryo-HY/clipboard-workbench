@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
 import { FileText, Link, Image, File, Code2, Star, Trash2 } from "lucide-react";
 import type { ClipboardItem } from "../types";
 
@@ -62,7 +61,7 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
     if (item.content_type === "image" && item.thumbnail) {
       return (
         <div className="flex items-start gap-3">
-          <div className="shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-[#0d0f13] border border-white/[0.04] relative">
+          <div className="shrink-0 w-14 h-14 rounded overflow-hidden bg-surface-0 border border-subtle relative">
             {!imgLoaded && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
@@ -97,7 +96,7 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
       const extIcon = getFileExtIcon(item.content);
       return (
         <div className="flex items-center gap-3">
-          <div className="shrink-0 w-10 h-10 rounded-lg bg-white/[0.03] border border-white/[0.04] flex items-center justify-center text-lg">
+          <div className="shrink-0 w-10 h-10 rounded bg-surface-2 border border-subtle flex items-center justify-center text-lg">
             {extIcon}
           </div>
           <div className="flex-1 min-w-0">
@@ -108,11 +107,10 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
       );
     }
 
-    // Text / link / code
     return (
       <div className="flex items-start gap-3">
-        <div className={`shrink-0 mt-0.5 w-7 h-7 rounded-md flex items-center justify-center ${
-          isSelected ? "bg-violet-500/12" : "bg-white/[0.03]"
+        <div className={`shrink-0 mt-0.5 w-7 h-7 rounded flex items-center justify-center ${
+          isSelected ? "bg-violet-500/12" : "bg-surface-2"
         }`}>
           <Icon className={`w-3.5 h-3.5 ${isSelected ? "text-violet-400" : config.accent}`} />
         </div>
@@ -135,12 +133,7 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
   };
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-      transition={{ duration: 0.12 }}
+    <div
       onClick={onClick}
       onDoubleClick={() => {
         if (item.content_type !== "image") {
@@ -150,10 +143,8 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
       onContextMenu={onContextMenu}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`group px-3 py-3 rounded-lg cursor-pointer transition-colors border ${
-        isSelected
-          ? "card-active"
-          : "border-transparent hover:bg-[#171a20] hover:border-white/[0.04]"
+      className={`group px-3 py-3 cursor-pointer transition-colors ${
+        isSelected ? "card-selected" : "card border-transparent"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -161,8 +152,8 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
           {renderContent()}
         </div>
 
-        {/* Actions on hover */}
-        <div className={`shrink-0 flex items-center gap-0.5 transition-opacity ${
+        {/* Hover actions */}
+        <div className={`shrink-0 flex items-center gap-0.5 transition-opacity duration-100 ${
           hovered || item.is_favorite ? "opacity-100" : "opacity-0"
         }`}>
           <button
@@ -170,7 +161,7 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
             className={`p-1 rounded transition-colors ${
               item.is_favorite
                 ? "text-amber-400 hover:bg-amber-500/10"
-                : "text-zinc-500 hover:text-amber-400 hover:bg-white/[0.04]"
+                : "text-zinc-500 hover:text-amber-400 hover:bg-surface-3"
             }`}
             title={item.is_favorite ? "取消收藏" : "收藏"}
           >
@@ -185,6 +176,6 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

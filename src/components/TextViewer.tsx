@@ -1,8 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Copy, Check, X } from "lucide-react";
 import type { ClipboardItem } from "../types";
-import { useState } from "react";
 
 interface Props {
   item: ClipboardItem;
@@ -50,13 +49,13 @@ export function TextViewer({ item, onClose }: Props) {
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 8 }}
-        className="w-[560px] max-h-[80vh] bg-[#171a20] border border-white/[0.06] rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 8 }}
+        className="w-[560px] max-h-[80vh] bg-surface-2 border border-subtle rounded shadow-2xl flex flex-col overflow-hidden"
       >
         {/* Header */}
-        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/[0.04]">
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-subtle">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-medium text-zinc-300">
               {typeLabel[item.content_type] || "文本"}
@@ -69,7 +68,7 @@ export function TextViewer({ item, onClose }: Props) {
           <div className="flex items-center gap-1">
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[13px] text-zinc-300
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-[13px] text-zinc-300
                 hover:text-violet-400 hover:bg-violet-500/10 transition-colors cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -77,7 +76,7 @@ export function TextViewer({ item, onClose }: Props) {
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-md text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06]
+              className="p-1.5 rounded text-zinc-500 hover:text-zinc-300 hover:bg-surface-3
                 transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />

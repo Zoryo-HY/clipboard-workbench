@@ -112,6 +112,7 @@ pub fn start_monitoring(
     handle: AppHandle,
     images_dir: PathBuf,
     last_written: Arc<Mutex<(String, Instant)>>,
+    last_hash: Arc<Mutex<String>>,
 ) {
     if MONITOR_STARTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         eprintln!("[monitor] ERROR: already running — refusing to spawn duplicate thread");
@@ -122,7 +123,6 @@ pub fn start_monitoring(
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(1));
 
-        let mut last_hash = String::new();
         let mut tick: u64 = 0;
 
         loop {
@@ -134,7 +134,9 @@ pub fn start_monitoring(
                 let lw = last_written.lock().unwrap();
                 if lw.1.elapsed().as_millis() < 500 && !lw.0.is_empty() {
                     eprintln!("[monitor t={}] debounce skip (last_written < 500ms)", tick);
-                    last_hash = lw.0.clone();
+                    if let Ok(mut lh) = last_hash.lock() {
+                        *lh = lw.0.clone();
+                    }
                     continue;
                 }
             }
@@ -167,73 +169,13 @@ pub fn start_monitoring(
                     auto_clean_days: 30,
                     start_minimized: false,
                     storage_path: String::new(),
+                    theme: "dark".into(),
                 }),
                 Err(_) => continue,
             };
 
             // ═══════════════════════════════════════════════════════
-            // 1. File clipboard (Windows CF_HDROP) — highest priority
-            // ═══════════════════════════════════════════════════════
-            if let Some(files) = file_clipboard::read() {
-                if !files.is_empty() {
-                    // Build file list text for hashing
-                    let file_text = files.iter()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .collect::<Vec<_>>()
-                        .join("\n");
-
-                    let mut hasher = Sha256::new();
-                    hasher.update(file_text.as_bytes());
-                    let hash = format!("{:x}", hasher.finalize());
-
-                    eprintln!("[monitor t={}] CF_HDROP: {} file(s), hash={:.12}", tick, files.len(), hash);
-
-                    if hash == last_hash {
-                        eprintln!("[monitor t={}] file: same hash, skip", tick);
-                        continue;
-                    }
-
-                    // Use first file as representative; store full list as content
-                    let first_path = files[0].to_string_lossy().to_string();
-                    let total_size: i64 = files.iter()
-                        .filter_map(|p| std::fs::metadata(p).ok())
-                        .map(|m| m.len() as i64)
-                        .sum();
-
-                    if total_size > settings.max_file_size_mb * 1024 * 1024 {
-                        eprintln!("[monitor t={}] file: size {} > limit, skip", tick, total_size);
-                        continue;
-                    }
-
-                    let (new_id, old_id, _) = match db.lock() {
-                        Ok(conn) => db::insert_item(&conn, "file", &first_path, &hash, total_size, None)
-                            .unwrap_or((0, None, None)),
-                        Err(_) => (0, None, None),
-                    };
-
-                    if new_id > 0 {
-                        last_hash = hash;
-                        eprintln!("[monitor t={}] file: saved id={} old_id={:?}", tick, new_id, old_id);
-                        let _ = handle.emit("clipboard-changed", ChangeEvent {
-                            old_id,
-                            item: db::ClipboardItem {
-                                id: new_id,
-                                content_type: "file".to_string(),
-                                content: first_path,
-                                thumbnail: None,
-                                size: total_size,
-                                is_favorite: false,
-                                is_cleared: false,
-                                created_at: chrono::Utc::now().to_rfc3339(),
-                            },
-                        });
-                    }
-                    continue; // files take priority, skip text/image
-                }
-            }
-
-            // ═══════════════════════════════════════════════════════
-            // 2. Read text/image via arboard
+            // 1. Read image/text via arboard (image has priority)
             // ═══════════════════════════════════════════════════════
             let mut clipboard = match arboard::Clipboard::new() {
                 Ok(cb) => cb,
@@ -246,10 +188,9 @@ pub fn start_monitoring(
             let text_result = clipboard.get_text();
             let img_result = clipboard.get_image();
 
-            // ═══════════════════════════════════════════════════════
-            // 3. Image
-            // ═══════════════════════════════════════════════════════
             let mut image_done = false;
+
+            // ── 1a. Image (checked first, before CF_HDROP) ──
             if let Ok(ref img) = img_result {
                 let mut hasher = Sha256::new();
                 hasher.update(&img.bytes);
@@ -257,7 +198,7 @@ pub fn start_monitoring(
 
                 eprintln!("[monitor t={}] image: {}x{} hash={:.12}", tick, img.width, img.height, hash);
 
-                if hash == last_hash {
+                if hash == *last_hash.lock().unwrap() {
                     eprintln!("[monitor t={}] image: same hash, skip", tick);
                     continue;
                 }
@@ -305,7 +246,7 @@ pub fn start_monitoring(
                         }
                     }
                     image_done = true;
-                    last_hash = hash;
+                    *last_hash.lock().unwrap() = hash;
                     eprintln!("[monitor t={}] image: saved id={} old_id={:?}", tick, new_id, old_id);
                     let _ = handle.emit("clipboard-changed", ChangeEvent {
                         old_id,
@@ -326,7 +267,68 @@ pub fn start_monitoring(
             }
 
             // ═══════════════════════════════════════════════════════
-            // 4. Text / link / code (only if no image was saved)
+            // 2. File clipboard (Windows CF_HDROP) — only if no image
+            // ═══════════════════════════════════════════════════════
+            if !image_done {
+                if let Some(files) = file_clipboard::read() {
+                    if !files.is_empty() {
+                        let file_text = files.iter()
+                            .map(|p| p.to_string_lossy().to_string())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
+                        let mut hasher = Sha256::new();
+                        hasher.update(file_text.as_bytes());
+                        let hash = format!("{:x}", hasher.finalize());
+
+                        eprintln!("[monitor t={}] CF_HDROP: {} file(s), hash={:.12}", tick, files.len(), hash);
+
+                        if hash == *last_hash.lock().unwrap() {
+                            eprintln!("[monitor t={}] file: same hash, skip", tick);
+                            continue;
+                        }
+
+                        let first_path = files[0].to_string_lossy().to_string();
+                        let total_size: i64 = files.iter()
+                            .filter_map(|p| std::fs::metadata(p).ok())
+                            .map(|m| m.len() as i64)
+                            .sum();
+
+                        if total_size > settings.max_file_size_mb * 1024 * 1024 {
+                            eprintln!("[monitor t={}] file: size {} > limit, skip", tick, total_size);
+                            continue;
+                        }
+
+                        let (new_id, old_id, _) = match db.lock() {
+                            Ok(conn) => db::insert_item(&conn, "file", &first_path, &hash, total_size, None)
+                                .unwrap_or((0, None, None)),
+                            Err(_) => (0, None, None),
+                        };
+
+                        if new_id > 0 {
+                            *last_hash.lock().unwrap() = hash;
+                            eprintln!("[monitor t={}] file: saved id={} old_id={:?}", tick, new_id, old_id);
+                            let _ = handle.emit("clipboard-changed", ChangeEvent {
+                                old_id,
+                                item: db::ClipboardItem {
+                                    id: new_id,
+                                    content_type: "file".to_string(),
+                                    content: first_path,
+                                    thumbnail: None,
+                                    size: total_size,
+                                    is_favorite: false,
+                                    is_cleared: false,
+                                    created_at: chrono::Utc::now().to_rfc3339(),
+                                },
+                            });
+                        }
+                        image_done = true; // block text below
+                    }
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════
+            // 3. Text / link / code (only if no image/file was saved)
             // ═══════════════════════════════════════════════════════
             if !image_done {
                 if let Ok(ref text) = text_result {
@@ -338,7 +340,7 @@ pub fn start_monitoring(
                         let content_type = classify_text(text);
                         eprintln!("[monitor t={}] text: len={} type={} hash={:.12}", tick, text.len(), content_type, hash);
 
-                        if hash == last_hash {
+                        if hash == *last_hash.lock().unwrap() {
                             eprintln!("[monitor t={}] text: same hash, skip", tick);
                             continue;
                         }
@@ -355,7 +357,7 @@ pub fn start_monitoring(
                         };
 
                         if new_id > 0 {
-                            last_hash = hash;
+                            *last_hash.lock().unwrap() = hash;
                             eprintln!("[monitor t={}] text: saved id={} old_id={:?}", tick, new_id, old_id);
                             let _ = handle.emit("clipboard-changed", ChangeEvent {
                                 old_id,

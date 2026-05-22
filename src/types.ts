@@ -19,6 +19,7 @@ export interface Settings {
   auto_clean_days: number;
   start_minimized: boolean;
   storage_path: string;
+  theme: string;
 }
 
 export interface ClipboardEventPayload extends ClipboardItem {

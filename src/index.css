@@ -2,6 +2,108 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================
+   Design tokens — dark theme (default)
+   ======================================== */
+
+:root {
+  --bg-shell: #1E1E1F;
+  --bg-0: #181819;
+  --bg-1: #1E1E1F;
+  --bg-2: #252526;
+  --bg-3: #2D2D2E;
+  --bg-hover: rgba(255, 255, 255, 0.03);
+  --bg-hover-strong: rgba(255, 255, 255, 0.06);
+
+  --text-primary: #CCCCCC;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --text-muted: #444444;
+
+  --border-1: #2D2D2D;
+  --border-2: #37373D;
+
+  --accent: #7C3AED;
+  --accent-bg: rgba(124, 58, 237, 0.10);
+  --accent-bg-hover: rgba(124, 58, 237, 0.15);
+  --accent-border: rgba(124, 58, 237, 0.20);
+  --accent-text: #A78BFA;
+
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.16);
+
+  --toggle-off: #3D3D3D;
+  --toggle-thumb: #CCCCCC;
+
+  --titlebar-text: #999999;
+  --titlebar-text-hover: #CCCCCC;
+
+  --danger-bg: rgba(239, 68, 68, 0.10);
+  --danger-text: #F87171;
+  --success-text: #34D399;
+  --success-bg: rgba(52, 211, 153, 0.10);
+  --warning-text: #FBBF24;
+
+  --card-selected-bg: #2A2A30;
+  --card-hover-bg: #2A2A2B;
+
+  --kbd-bg: rgba(255, 255, 255, 0.06);
+  --input-bg: #252526;
+}
+
+/* ========================================
+   Light theme
+   ======================================== */
+
+.light {
+  --bg-shell: #FFFFFF;
+  --bg-0: #F3F3F3;
+  --bg-1: #FFFFFF;
+  --bg-2: #F5F5F5;
+  --bg-3: #E8E8E8;
+  --bg-hover: rgba(0, 0, 0, 0.02);
+  --bg-hover-strong: rgba(0, 0, 0, 0.05);
+
+  --text-primary: #1A1A1A;
+  --text-secondary: #555555;
+  --text-tertiary: #888888;
+  --text-muted: #BBBBBB;
+
+  --border-1: #E0E0E0;
+  --border-2: #D0D0D0;
+
+  --accent: #2563EB;
+  --accent-bg: rgba(37, 99, 235, 0.06);
+  --accent-bg-hover: rgba(37, 99, 235, 0.10);
+  --accent-border: rgba(37, 99, 235, 0.20);
+  --accent-text: #1D4ED8;
+
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.24);
+
+  --toggle-off: #D0D0D0;
+  --toggle-thumb: #FFFFFF;
+
+  --titlebar-text: #777777;
+  --titlebar-text-hover: #333333;
+
+  --danger-bg: rgba(239, 68, 68, 0.08);
+  --danger-text: #DC2626;
+  --success-text: #059669;
+  --success-bg: rgba(5, 150, 105, 0.08);
+  --warning-text: #D97706;
+
+  --card-selected-bg: #E8F0FE;
+  --card-hover-bg: #F0F0F0;
+
+  --kbd-bg: rgba(0, 0, 0, 0.04);
+  --input-bg: #F5F5F5;
+}
+
+/* ========================================
+   Base
+   ======================================== */
+
 * {
   margin: 0;
   padding: 0;
@@ -11,67 +113,108 @@
 html, body, #root {
   height: 100%;
   width: 100%;
-  background: #111318;
-  color: #d4d4d8;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg-shell);
+  color: var(--text-primary);
+  font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
-/* Solid shell */
+/* ========================================
+   Surface levels
+   ======================================== */
+
 .shell {
-  background: #111318;
+  background: var(--bg-shell);
 }
 
-/* Panel backgrounds */
-.bg-panel-raised {
-  background: #171a20;
-}
-.bg-panel-overlay {
-  background: #1d2128;
+.bg-surface-0 {
+  background: var(--bg-0);
 }
 
-/* Card with subtle depth */
+.bg-surface-1 {
+  background: var(--bg-1);
+}
+
+.bg-surface-2 {
+  background: var(--bg-2);
+}
+
+.bg-surface-3 {
+  background: var(--bg-3);
+}
+
+/* ========================================
+   Borders
+   ======================================== */
+
+.border-subtle {
+  border: 1px solid var(--border-1);
+}
+
+.border-accent {
+  border: 1px solid var(--accent-border);
+}
+
+/* ========================================
+   Card
+   ======================================== */
+
 .card {
-  background: #171a20;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
 }
 
 .card:hover {
-  background: #1a1d24;
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--card-hover-bg);
 }
 
-.card-active {
-  background: #1d2030;
-  border-color: rgba(124, 58, 237, 0.25);
+.card-selected {
+  background: var(--card-selected-bg);
+  border: 1px solid var(--border-2);
+  border-left: 2px solid var(--accent);
+  border-radius: 4px;
 }
 
-/* Custom scrollbar */
+/* ========================================
+   Scrollbar
+   ======================================== */
+
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 10px;
+  height: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
+  background: var(--scrollbar-thumb);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scrollbar-thumb-hover);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.custom-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
-/* Range slider */
+/* ========================================
+   Range slider
+   ======================================== */
+
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--toggle-off);
   border-radius: 2px;
   outline: none;
 }
@@ -81,50 +224,51 @@ input[type='range']::-webkit-slider-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #7C3AED;
+  background: var(--accent);
   cursor: pointer;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  transition: transform 0.15s;
-}
-input[type='range']::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  border: 2px solid var(--border-1);
 }
 
-/* Toggle switch */
+/* ========================================
+   Toggle switch
+   ======================================== */
+
 .toggle-track {
   width: 36px;
   height: 20px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  transition: background 0.2s;
+  background: var(--toggle-off);
+  transition: background 0.15s;
   cursor: pointer;
   position: relative;
 }
 .toggle-track.active {
-  background: #7C3AED;
+  background: var(--accent);
 }
 .toggle-thumb {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: white;
+  background: var(--toggle-thumb);
   position: absolute;
   top: 2px;
   left: 2px;
-  transition: transform 0.2s;
+  transition: transform 0.15s;
 }
 .toggle-track.active .toggle-thumb {
   transform: translateX(16px);
 }
 
-/* Drag region cursor */
+/* ========================================
+   Drag region
+   ======================================== */
+
 [data-tauri-drag-region] {
   cursor: grab !important;
 }
 [data-tauri-drag-region]:active {
   cursor: grabbing !important;
 }
-/* Ensure child interactive elements override drag cursor */
 [data-tauri-drag-region] button,
 [data-tauri-drag-region] input,
 [data-tauri-drag-region] select,
@@ -133,11 +277,108 @@ input[type='range']::-webkit-slider-thumb:hover {
   cursor: pointer !important;
 }
 
-/* Context menu animation */
+/* ========================================
+   Context menu animation
+   ======================================== */
+
 @keyframes context-menu-in {
-  from { opacity: 0; transform: scale(0.95); }
-  to   { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 .context-menu-enter {
-  animation: context-menu-in 0.1s ease-out;
+  animation: context-menu-in 0.08s ease-out;
 }
+
+/* ========================================
+   Titlebar button
+   ======================================== */
+
+.titlebar-btn {
+  width: 36px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--titlebar-text);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s, color 0.1s;
+}
+.titlebar-btn:hover {
+  background: var(--bg-hover-strong);
+  color: var(--titlebar-text-hover);
+}
+.titlebar-btn-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+/* ========================================
+   Theme toggle buttons
+   ======================================== */
+
+.theme-option {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--border-1);
+  background: var(--bg-2);
+  color: var(--text-tertiary);
+}
+.theme-option:hover {
+  background: var(--bg-3);
+  color: var(--text-secondary);
+}
+.theme-option.active {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+  color: var(--accent-text);
+}
+
+/* ========================================
+   Light-theme Tailwind overrides
+   ======================================== */
+
+.light .text-zinc-200,
+.light .text-zinc-300 { color: #1A1A1A; }
+.light .text-zinc-400 { color: #555555; }
+.light .text-zinc-500 { color: #888888; }
+.light .text-zinc-600 { color: #BBBBBB; }
+.light .text-zinc-800 { color: #1A1A1A; }
+.light .text-zinc-700 { color: #444444; }
+
+.light .text-violet-300 { color: #1D4ED8; }
+.light .text-violet-400 { color: #2563EB; }
+.light .text-violet-500 { color: #3B82F6; }
+
+.light .text-red-400 { color: #DC2626; }
+.light .text-red-300 { color: #DC2626; }
+.light .text-emerald-400 { color: #059669; }
+.light .text-amber-400 { color: #D97706; }
+
+.light .hover\:text-zinc-200:hover { color: #1A1A1A; }
+.light .hover\:text-zinc-300:hover { color: #1A1A1A; }
+.light .hover\:text-violet-300:hover { color: #1D4ED8; }
+.light .hover\:text-violet-400:hover { color: #2563EB; }
+.light .hover\:text-red-400:hover { color: #DC2626; }
+.light .hover\:text-zinc-400:hover { color: #555555; }
+
+.light .hover\:bg-white\/\[0\.03\]:hover { background: rgba(0,0,0,0.03); }
+.light .hover\:bg-surface-3:hover { background: var(--bg-3); }
+.light .hover\:bg-surface-2:hover { background: var(--bg-2); }
+
+.light .border-\[\#2D2D2D\] { border-color: #E0E0E0; }
+
+.light .placeholder\:text-zinc-600::placeholder { color: #BBBBBB; }
+.light .bg-violet-500\/10 { background: rgba(37,99,235,0.06); }
+.light .bg-violet-500\/15 { background: rgba(37,99,235,0.10); }
+.light .bg-violet-500\/20 { background: rgba(37,99,235,0.12); }
+.light .bg-violet-500\/80 { background: rgba(37,99,235,0.80); }
+.light .border-l-violet-500 { border-left-color: #2563EB; }
+.light .bg-emerald-500\/10 { background: rgba(5,150,105,0.08); }
+

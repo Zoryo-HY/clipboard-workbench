@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
 interface Props {
@@ -41,19 +41,16 @@ export function ShortcutCapture({ open, currentMod, currentKey, onSave, onClose 
     if (e.shiftKey) mods.push("Shift");
     if (e.metaKey) mods.push("Super");
 
-    // Modifier-only keys
     if (e.code.startsWith("Control") || e.code.startsWith("Alt") ||
         e.code.startsWith("Shift") || e.code.startsWith("Meta")) {
       setCapturedMods(mods);
       return;
     }
 
-    // Capture the actual key
     setCapturedMods(mods);
     setCapturedKey(codeToName(e.code));
     setPhase("done");
 
-    // Auto-save after short delay
     const modifiers = mods.length > 0 ? mods.join("+") : "Control";
     const key = codeToName(e.code);
     setTimeout(() => {
@@ -61,7 +58,6 @@ export function ShortcutCapture({ open, currentMod, currentKey, onSave, onClose 
     }, 600);
   };
 
-  // Focus trap
   useEffect(() => {
     if (!open) return;
     setCapturedMods([]);
@@ -85,18 +81,17 @@ export function ShortcutCapture({ open, currentMod, currentKey, onSave, onClose 
       onClick={onClose}
     >
       <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-[320px] p-6 rounded-xl bg-[#14171d] border border-white/[0.08] shadow-2xl"
+        className="w-[320px] p-6 rounded bg-surface-2 border border-subtle shadow-2xl"
       >
         <h3 className="text-sm font-semibold text-zinc-200 mb-1">设置快捷键</h3>
         <p className="text-xs text-zinc-500 mb-4">
           {phase === "waiting" ? "按下组合键…" : "快捷键已捕获，自动保存中…"}
         </p>
 
-        {/* Current shortcut display */}
-        <div className="mb-4 p-3 rounded-lg bg-[#0d0f13] border border-violet-500/10">
+        <div className="mb-4 p-3 rounded bg-surface-0 border border-violet-500/10">
           <p className="text-xs text-zinc-500 mb-1">
             {phase === "waiting" ? "按下快捷键" : "已捕获"}
           </p>
@@ -108,7 +103,7 @@ export function ShortcutCapture({ open, currentMod, currentKey, onSave, onClose 
                 className="flex items-center gap-2"
               >
                 {capturedMods.map((m) => (
-                  <kbd key={m} className="px-2.5 py-1.5 rounded-md bg-violet-500/15 border border-violet-500/20
+                  <kbd key={m} className="px-2.5 py-1.5 rounded bg-violet-500/15 border border-violet-500/20
                     text-lg text-violet-300 font-mono font-semibold">
                     {modLabels[m] || m}
                   </kbd>
@@ -116,7 +111,7 @@ export function ShortcutCapture({ open, currentMod, currentKey, onSave, onClose 
                 {capturedKey && (
                   <>
                     {capturedMods.length > 0 && <span className="text-zinc-500 text-sm">+</span>}
-                    <kbd className="px-2.5 py-1.5 rounded-md bg-violet-500/15 border border-violet-500/20
+                    <kbd className="px-2.5 py-1.5 rounded bg-violet-500/15 border border-violet-500/20
                       text-lg text-violet-300 font-mono font-semibold">
                       {capturedKey}
                     </kbd>
@@ -127,13 +122,13 @@ export function ShortcutCapture({ open, currentMod, currentKey, onSave, onClose 
             {phase === "waiting" && (
               <div className="flex items-center gap-2">
                 {currentMod.split("+").map((m) => (
-                  <kbd key={m} className="px-2.5 py-1.5 rounded-md bg-white/[0.04] border border-white/[0.06]
+                  <kbd key={m} className="px-2.5 py-1.5 rounded bg-surface-0 border border-subtle
                     text-lg text-zinc-300 font-mono font-semibold">
                     {modLabels[m] || m}
                   </kbd>
                 ))}
                 <span className="text-zinc-500 text-sm">+</span>
-                <kbd className="px-2.5 py-1.5 rounded-md bg-white/[0.04] border border-white/[0.06]
+                <kbd className="px-2.5 py-1.5 rounded bg-surface-0 border border-subtle
                   text-lg text-zinc-300 font-mono font-semibold">
                   {currentKey}
                 </kbd>

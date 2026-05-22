@@ -31,7 +31,11 @@ pub struct Settings {
     pub start_minimized: bool,
     #[serde(default)]
     pub storage_path: String,
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
+
+fn default_theme() -> String { "dark".into() }
 
 pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch(
@@ -57,7 +61,8 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
         INSERT OR IGNORE INTO settings (key, value) VALUES ('start_minimized', 'false');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_path', '');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_modifiers', 'Control');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_key', 'Space');"
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_key', 'Space');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'dark');"
     )?;
     // Migration: add thumbnail column for existing databases
     let _ = conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN thumbnail TEXT;");
@@ -76,17 +81,10 @@ pub fn insert_item(conn: &Connection, content_type: &str, content: &str, hash: &
         |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0)),
     ).ok();
 
-    // If old item was cleared, re-insert as cleared (no thumbnail/preview)
-    let (effective_thumb, effective_cleared) = if old.as_ref().map(|o| o.2).unwrap_or(false) {
-        (None, true)
-    } else {
-        (thumbnail, false)
-    };
-
     conn.execute(
         "INSERT OR REPLACE INTO clipboard_items (content_type, content, content_hash, thumbnail, size, is_cleared, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![content_type, content, hash, effective_thumb, size, effective_cleared as i64, chrono::Utc::now().to_rfc3339()],
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
+        params![content_type, content, hash, thumbnail, size, chrono::Utc::now().to_rfc3339()],
     )?;
 
     let new_id = conn.last_insert_rowid();
@@ -282,6 +280,7 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, rusqlite::Error> {
         auto_clean_days: get_val("auto_clean_days", "30").parse().unwrap_or(30),
         start_minimized: get_val("start_minimized", "false") == "true",
         storage_path: get_val("storage_path", ""),
+        theme: get_val("theme", "dark"),
     })
 }
 
@@ -300,5 +299,6 @@ pub fn update_settings(conn: &Connection, settings: &Settings) -> Result<(), rus
     set("auto_clean_days", &settings.auto_clean_days.to_string())?;
     set("start_minimized", if settings.start_minimized { "true" } else { "false" })?;
     set("storage_path", &settings.storage_path)?;
+    set("theme", &settings.theme)?;
     Ok(())
 }
