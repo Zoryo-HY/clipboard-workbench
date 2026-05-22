@@ -20,6 +20,7 @@ export interface Settings {
   start_minimized: boolean;
   storage_path: string;
   theme: string;
+  auto_start: boolean;
 }
 
 export interface ClipboardEventPayload extends ClipboardItem {

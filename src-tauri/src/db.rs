@@ -33,6 +33,8 @@ pub struct Settings {
     pub storage_path: String,
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default)]
+    pub auto_start: bool,
 }
 
 fn default_theme() -> String { "dark".into() }
@@ -62,7 +64,8 @@ pub fn init(conn: &Connection) -> Result<(), rusqlite::Error> {
         INSERT OR IGNORE INTO settings (key, value) VALUES ('storage_path', '');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_modifiers', 'Control');
         INSERT OR IGNORE INTO settings (key, value) VALUES ('shortcut_key', 'Space');
-        INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'dark');"
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('theme', 'dark');
+        INSERT OR IGNORE INTO settings (key, value) VALUES ('auto_start', 'false');"
     )?;
     // Migration: add thumbnail column for existing databases
     let _ = conn.execute_batch("ALTER TABLE clipboard_items ADD COLUMN thumbnail TEXT;");
@@ -281,6 +284,7 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, rusqlite::Error> {
         start_minimized: get_val("start_minimized", "false") == "true",
         storage_path: get_val("storage_path", ""),
         theme: get_val("theme", "dark"),
+        auto_start: get_val("auto_start", "false") == "true",
     })
 }
 
@@ -300,5 +304,6 @@ pub fn update_settings(conn: &Connection, settings: &Settings) -> Result<(), rus
     set("start_minimized", if settings.start_minimized { "true" } else { "false" })?;
     set("storage_path", &settings.storage_path)?;
     set("theme", &settings.theme)?;
+    set("auto_start", if settings.auto_start { "true" } else { "false" })?;
     Ok(())
 }

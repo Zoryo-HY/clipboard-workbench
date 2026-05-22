@@ -170,6 +170,7 @@ pub fn start_monitoring(
                     start_minimized: false,
                     storage_path: String::new(),
                     theme: "dark".into(),
+                    auto_start: false,
                 }),
                 Err(_) => continue,
             };

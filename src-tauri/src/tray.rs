@@ -26,20 +26,21 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         .on_menu_event(|app, event| {
             match event.id().as_ref() {
                 "show" => {
-                    // Toggle last active window
-                    let label = {
-                        let state = app.state::<crate::AppState>();
-                        state.last_active_label.lock()
-                            .map(|l| l.clone())
-                            .unwrap_or_else(|_| "main".to_string())
-                    };
+                    let state = app.state::<crate::AppState>();
+                    let label = state.last_active_label.lock()
+                        .map(|l| l.clone())
+                        .unwrap_or_else(|_| "main".to_string());
                     let label = if label.is_empty() { "main" } else { &label };
                     if let Some(w) = app.get_webview_window(label) {
-                        if w.is_visible().unwrap_or(false) {
+                        let visible = *state.window_visible.lock().unwrap_or_else(|e| e.into_inner());
+                        if visible {
                             let _ = w.hide();
+                            if let Ok(mut v) = state.window_visible.lock() { *v = false; }
                         } else {
                             let _ = w.show();
+                            let _ = w.unminimize();
                             let _ = w.set_focus();
+                            if let Ok(mut v) = state.window_visible.lock() { *v = true; }
                         }
                     }
                 }
@@ -59,20 +60,22 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } = event {
                 let app = tray.app_handle();
-                let label = {
-                    let state = app.state::<crate::AppState>();
-                    state.last_active_label.lock()
-                        .map(|l| l.clone())
-                        .unwrap_or_else(|_| "main".to_string())
-                };
+                let state = app.state::<crate::AppState>();
+                let label = state.last_active_label.lock()
+                    .map(|l| l.clone())
+                    .unwrap_or_else(|_| "main".to_string());
                 let label = if label.is_empty() { "main" } else { &label };
                 eprintln!("[tray] double-click → toggle '{}'", label);
                 if let Some(w) = app.get_webview_window(label) {
-                    if w.is_visible().unwrap_or(false) {
+                    let visible = *state.window_visible.lock().unwrap_or_else(|e| e.into_inner());
+                    if visible {
                         let _ = w.hide();
+                        if let Ok(mut v) = state.window_visible.lock() { *v = false; }
                     } else {
                         let _ = w.show();
+                        let _ = w.unminimize();
                         let _ = w.set_focus();
+                        if let Ok(mut v) = state.window_visible.lock() { *v = true; }
                     }
                 }
             }

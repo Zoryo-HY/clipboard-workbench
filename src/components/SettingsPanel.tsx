@@ -21,6 +21,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
     settings.auto_clean_days > 0 ? settings.auto_clean_days : 30
   );
   const [startMinimized, setStartMinimized] = useState(settings.start_minimized);
+  const [autoStart, setAutoStart] = useState(settings.auto_start);
   const [storagePath, setStoragePath] = useState(settings.storage_path);
   const [theme, setTheme] = useState(settings.theme || "dark");
   const [dataDir, setDataDir] = useState("");
@@ -39,10 +40,11 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       || autoClean !== (settings.auto_clean_days > 0)
       || (autoClean && cleanDays !== (settings.auto_clean_days > 0 ? settings.auto_clean_days : 30))
       || startMinimized !== settings.start_minimized
+      || autoStart !== settings.auto_start
       || storagePath !== settings.storage_path
       || theme !== (settings.theme || "dark")
       || shortcutMod !== "Control" || shortcutKey !== "Space";
-  }, [maxText, maxImg, maxFile, storage, autoClean, cleanDays, startMinimized, storagePath, theme, shortcutMod, shortcutKey, settings]);
+  }, [maxText, maxImg, maxFile, storage, autoClean, cleanDays, startMinimized, autoStart, storagePath, theme, shortcutMod, shortcutKey, settings]);
 
   useEffect(() => {
     invoke<string>("get_data_dir").then(setDataDir).catch(() => {});
@@ -59,6 +61,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
       total_storage_limit_mb: storage,
       auto_clean_days: autoClean ? cleanDays : 0,
       start_minimized: startMinimized,
+      auto_start: autoStart,
       storage_path: storagePath,
       theme,
     });
@@ -229,6 +232,16 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
             description="开启后软件启动时不会弹出窗口"
             checked={startMinimized}
             onChange={setStartMinimized}
+          />
+          <ToggleRow
+            label="开机自启动"
+            description="系统启动时自动运行 Clipboard Workbench"
+            checked={autoStart}
+            onChange={async (v) => {
+              setAutoStart(v);
+              try { await invoke("set_auto_start", { enable: v }); }
+              catch (e) { console.error("set_auto_start failed:", e); }
+            }}
           />
         </Section>
 

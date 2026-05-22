@@ -27,6 +27,7 @@ export default function App() {
     start_minimized: false,
     storage_path: "",
     theme: "dark",
+    auto_start: false,
   });
 
   // Context menu state

@@ -14,6 +14,7 @@ pub struct AppState {
     data_dir: std::path::PathBuf,
     default_data_dir: std::path::PathBuf,
     last_active_label: Arc<Mutex<String>>,
+    window_visible: Arc<Mutex<bool>>,
 }
 
 #[tauri::command]
@@ -318,6 +319,7 @@ fn switch_to_mini(state: tauri::State<AppState>, app: tauri::AppHandle) -> Resul
         let _ = w.show();
         let _ = w.set_focus();
     }
+    if let Ok(mut v) = state.window_visible.lock() { *v = true; }
     eprintln!("[switch] → mini window");
     Ok(())
 }
@@ -328,8 +330,10 @@ fn switch_to_main(state: tauri::State<AppState>, app: tauri::AppHandle) -> Resul
     if let Some(w) = app.get_webview_window("mini") { let _ = w.hide(); }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.show();
+        let _ = w.unminimize();
         let _ = w.set_focus();
     }
+    if let Ok(mut v) = state.window_visible.lock() { *v = true; }
     eprintln!("[switch] → main window");
     Ok(())
 }
@@ -339,12 +343,16 @@ fn toggle_active_window(state: tauri::State<AppState>, app: tauri::AppHandle) ->
     let label = state.last_active_label.lock().map_err(|e| e.to_string())?.clone();
     let label = if label.is_empty() { "main".to_string() } else { label };
     if let Some(w) = app.get_webview_window(&label) {
-        if w.is_visible().unwrap_or(false) {
+        let visible = *state.window_visible.lock().map_err(|e| e.to_string())?;
+        if visible {
             let _ = w.hide();
+            if let Ok(mut v) = state.window_visible.lock() { *v = false; }
             eprintln!("[toggle] hide {}", label);
         } else {
             let _ = w.show();
+            let _ = w.unminimize();
             let _ = w.set_focus();
+            if let Ok(mut v) = state.window_visible.lock() { *v = true; }
             eprintln!("[toggle] show {}", label);
         }
     }
@@ -473,6 +481,40 @@ fn parse_key_code(s: &str) -> Option<tauri_plugin_global_shortcut::Code> {
     }
 }
 
+#[tauri::command]
+fn set_auto_start(enable: bool, state: tauri::State<AppState>) -> Result<bool, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe_path = exe.to_string_lossy().to_string();
+    if enable {
+        let output = std::process::Command::new("reg")
+            .args(["add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                   "/v", "ClipboardWorkbench", "/t", "REG_SZ",
+                   "/d", &exe_path, "/f"])
+            .output()
+            .map_err(|e| format!("reg add failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("reg add error: {}", stderr));
+        }
+    } else {
+        let output = std::process::Command::new("reg")
+            .args(["delete", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
+                   "/v", "ClipboardWorkbench", "/f"])
+            .output()
+            .map_err(|e| format!("reg delete failed: {}", e))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("reg delete error: {}", stderr));
+        }
+    }
+    // Persist to DB
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let val = if enable { "true" } else { "false" };
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('auto_start', ?1)", rusqlite::params![val])
+        .map_err(|e| e.to_string())?;
+    Ok(enable)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -487,9 +529,15 @@ pub fn run() {
                             .unwrap_or_else(|_| "main".to_string());
                         let label = if label.is_empty() { "main".to_string() } else { label };
                         if let Some(w) = app.get_webview_window(&label) {
-                            match w.is_visible() {
-                                Ok(true) => { let _ = w.hide(); }
-                                _ => { let _ = w.show(); let _ = w.set_focus(); }
+                            let visible = *state.window_visible.lock().unwrap_or_else(|e| e.into_inner());
+                            if visible {
+                                let _ = w.hide();
+                                if let Ok(mut v) = state.window_visible.lock() { *v = false; }
+                            } else {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                                if let Ok(mut v) = state.window_visible.lock() { *v = true; }
                             }
                         }
                     }
@@ -535,6 +583,7 @@ pub fn run() {
             let last_written = Arc::new(Mutex::new((String::new(), Instant::now())));
             let last_hash = Arc::new(Mutex::new(String::new()));
             let last_active_label = Arc::new(Mutex::new("main".to_string()));
+            let window_visible = Arc::new(Mutex::new(true));
 
             app.manage(AppState {
                 db: db.clone(),
@@ -543,6 +592,7 @@ pub fn run() {
                 data_dir: data_dir.clone(),
                 default_data_dir: default_data_dir.clone(),
                 last_active_label: last_active_label.clone(),
+                window_visible: window_visible.clone(),
             });
 
             let images_dir = data_dir.join("images");
@@ -576,15 +626,18 @@ pub fn run() {
 
                 let handle = app.handle().clone();
                 let label_ref = last_active_label.clone();
+                let vis_ref = window_visible.clone();
                 window.on_window_event(move |event| {
                     match event {
                         tauri::WindowEvent::CloseRequested { api, .. } => {
                             api.prevent_close();
                             if let Some(w) = handle.get_webview_window("main") { let _ = w.hide(); }
                             if let Ok(mut l) = label_ref.lock() { *l = "main".to_string(); }
+                            if let Ok(mut v) = vis_ref.lock() { *v = false; }
                         }
                         tauri::WindowEvent::Focused(focused) if *focused => {
                             if let Ok(mut l) = label_ref.lock() { *l = "main".to_string(); }
+                            if let Ok(mut v) = vis_ref.lock() { *v = true; }
                         }
                         _ => {}
                     }
@@ -631,6 +684,7 @@ pub fn run() {
             take_screenshot,
             get_shortcut_config,
             update_shortcut,
+            set_auto_start,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
