@@ -11,7 +11,7 @@ fn main() {
         });
 
     let db_path = app_data
-        .join("com.clipboard-workbench.app")
+        .join("com.copybox.app")
         .join("clipboard.db");
 
     match std::fs::remove_file(&db_path) {

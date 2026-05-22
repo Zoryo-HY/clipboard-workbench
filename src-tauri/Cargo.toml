@@ -1,13 +1,13 @@
 [package]
-name = "clipboard-workbench"
+name = "copybox"
 version = "0.1.0"
-description = "A local clipboard workbench"
+description = "CopyBox - A local clipboard manager"
 authors = ["user"]
 edition = "2021"
-default-run = "clipboard-workbench"
+default-run = "copybox"
 
 [lib]
-name = "clipboard_workbench_lib"
+name = "copybox_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [[bin]]

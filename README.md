@@ -1,4 +1,4 @@
-# Clipboard Workbench
+# CopyBox
 
 A lightweight local clipboard manager with a floating panel UI. Built with Tauri + React.
 
@@ -65,7 +65,7 @@ Over-limit content is silently truncated/dropped.
 ## Project Structure
 
 ```
-clipboard-workbench/
+copybox/
 ├── src/                          # React frontend
 │   ├── main.tsx                  # Entry point
 │   ├── App.tsx                   # Root component
@@ -97,8 +97,8 @@ clipboard-workbench/
 
 SQLite file location:
 
-- Windows: `%APPDATA%/com.clipboard-workbench.app/clipboard.db`
-- macOS:   `~/Library/Application Support/com.clipboard-workbench.app/clipboard.db`
+- Windows: `%APPDATA%/com.copybox.app/clipboard.db`
+- macOS:   `~/Library/Application Support/com.copybox.app/clipboard.db`
 
 ## Building
 

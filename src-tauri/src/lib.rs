@@ -488,7 +488,7 @@ fn set_auto_start(enable: bool, state: tauri::State<AppState>) -> Result<bool, S
     if enable {
         let output = std::process::Command::new("reg")
             .args(["add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                   "/v", "ClipboardWorkbench", "/t", "REG_SZ",
+                   "/v", "CopyBox", "/t", "REG_SZ",
                    "/d", &exe_path, "/f"])
             .output()
             .map_err(|e| format!("reg add failed: {}", e))?;
@@ -499,7 +499,7 @@ fn set_auto_start(enable: bool, state: tauri::State<AppState>) -> Result<bool, S
     } else {
         let output = std::process::Command::new("reg")
             .args(["delete", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
-                   "/v", "ClipboardWorkbench", "/f"])
+                   "/v", "CopyBox", "/f"])
             .output()
             .map_err(|e| format!("reg delete failed: {}", e))?;
         if !output.status.success() {

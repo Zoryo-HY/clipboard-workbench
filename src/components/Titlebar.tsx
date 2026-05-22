@@ -30,7 +30,7 @@ export const Titlebar: React.FC = () => {
           className="text-[12px] font-medium select-none pointer-events-none"
           style={{ color: 'var(--titlebar-text)' }}
         >
-          Clipboard Workbench
+          CopyBox
         </span>
       </div>
 

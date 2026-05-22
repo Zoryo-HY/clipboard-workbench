@@ -235,7 +235,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
           />
           <ToggleRow
             label="开机自启动"
-            description="系统启动时自动运行 Clipboard Workbench"
+            description="系统启动时自动运行 CopyBox"
             checked={autoStart}
             onChange={async (v) => {
               setAutoStart(v);
@@ -314,7 +314,7 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
         </button>
 
         <p className="text-center text-xs text-zinc-600 pb-2">
-          Clipboard Workbench v0.1.0
+          CopyBox v0.1.0
         </p>
       </div>
     </div>

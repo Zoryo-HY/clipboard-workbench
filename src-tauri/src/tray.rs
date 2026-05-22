@@ -22,7 +22,7 @@ pub fn setup(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let _tray = TrayIconBuilder::new()
         .icon(icon)
         .menu(&menu)
-        .tooltip("Clipboard Workbench — 双击切换窗口")
+        .tooltip("CopyBox — 双击切换窗口")
         .on_menu_event(|app, event| {
             match event.id().as_ref() {
                 "show" => {
