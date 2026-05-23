@@ -64,8 +64,8 @@ export function MiniWindow() {
       setTheme(event.payload.theme || "dark");
     });
 
-    // Sync theme whenever window gains focus (belt-and-suspenders)
-    const onFocus = () => { syncTheme(); };
+    // Sync theme + data whenever window gains focus (belt-and-suspenders)
+    const onFocus = () => { syncTheme(); loadItems(); };
     window.addEventListener('focus', onFocus);
 
     return () => {
