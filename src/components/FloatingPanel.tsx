@@ -31,19 +31,38 @@ function classifyItem(item: ClipboardItem): CategoryId {
   return "text";
 }
 
+const labelToCategory: Record<string, CategoryId> = {
+  "文本": "text", "链接": "link", "图片": "image", "文件": "file", "代码": "code", "网页": "code",
+};
+
+/// Parse type labels from compound content like "混合内容（文本 + 链接）"
+function parseCompoundCategories(content: string): CategoryId[] {
+  const match = content.match(/（(.+?)）/);
+  if (!match) return ["text"];
+  const types: CategoryId[] = [];
+  for (const label of match[1].split(/\s*\+\s*/)) {
+    const cat = labelToCategory[label];
+    if (cat && !types.includes(cat)) {
+      types.push(cat);
+    }
+  }
+  return types.length > 0 ? types : ["text"];
+}
+
 /// Returns all categories a compound item belongs to
 function compoundCategories(item: ClipboardItem): CategoryId[] {
   if (item.content_type !== "compound") return [classifyItem(item)];
-  const types: CategoryId[] = [];
   if (item.children) {
+    const types: CategoryId[] = [];
     for (const child of item.children) {
       const c = classifyItem(child);
       if (c !== "compound" && !types.includes(c)) {
         types.push(c);
       }
     }
+    if (types.length > 0) return types;
   }
-  return types.length > 0 ? types : ["text"];
+  return parseCompoundCategories(item.content);
 }
 
 function itemMatchesCategory(item: ClipboardItem, category: CategoryId): boolean {
