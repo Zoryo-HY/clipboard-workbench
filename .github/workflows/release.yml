@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 0.2.0)'
+        required: true
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Update version numbers
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          (Get-Content src-tauri/tauri.conf.json -Raw) -replace '"version": "[^"]*"', """version"": ""$ver""" | Set-Content src-tauri/tauri.conf.json
+          (Get-Content src-tauri/Cargo.toml -Raw) -replace '^version = "[^"]*"', "version = ""$ver""" | Set-Content src-tauri/Cargo.toml
+          (Get-Content package.json -Raw) -replace '"version": "[^"]*"', """version"": ""$ver""" | Set-Content package.json
+
+      - name: Build release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+        with:
+          tagName: v${{ github.event.inputs.version }}
+          releaseName: "CopyBox v${{ github.event.inputs.version }}"
+          releaseBody: ""
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true

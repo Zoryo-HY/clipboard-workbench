@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { check } from "@tauri-apps/plugin-updater";
 import { AnimatePresence } from "framer-motion";
 import { Titlebar } from "./components/Titlebar";
 import { Sidebar } from "./components/Sidebar";
@@ -60,6 +61,12 @@ export default function App() {
   useEffect(() => {
     loadHistory();
     loadSettings();
+    // Auto-check for updates on startup
+    check().then((update) => {
+      if (update) {
+        console.log(`[updater] New version v${update.version} available`);
+      }
+    }).catch(() => { /* silent */ });
   }, [loadHistory, loadSettings]);
 
   // ── Event listeners ───────────────────────────
