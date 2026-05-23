@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Trash2, Copy, ClipboardList, Check, Maximize2 } from "lucide-react";
+import { Camera, Trash2, Copy, ClipboardList, Check, Maximize2, Minus, X } from "lucide-react";
 import { TextViewer } from "./TextViewer";
 import type { ClipboardItem, Settings } from "../types";
 
@@ -100,6 +100,10 @@ export function MiniWindow() {
 
   const handleItemDoubleClick = (item: ClipboardItem) => {
     if (item.is_cleared) return;
+    if (item.content_type === "compound") {
+      invoke("switch_to_main");
+      return;
+    }
     if (item.content_type === "image") {
       invoke("open_image", { path: item.content }).catch(console.error);
     } else {
@@ -118,6 +122,7 @@ export function MiniWindow() {
 
   const getPreview = (item: ClipboardItem): string => {
     if (item.is_cleared) return "(已清除)";
+    if (item.content_type === "compound") return item.content;
     if (item.content_type === "image") return "图片";
     if (item.content_type === "file") {
       const name = item.content.split("\\").pop()?.split("/").pop() || item.content;
@@ -132,6 +137,7 @@ export function MiniWindow() {
       case "file": return "FILE";
       case "link": return "URL";
       case "code": return "< >";
+      case "compound": return "++";
       default: return "Aa";
     }
   };
@@ -140,6 +146,14 @@ export function MiniWindow() {
     <div className={`flex flex-col h-full w-full bg-surface-0 ${theme === "light" ? "light" : ""}`}>
       {/* Titlebar */}
       <div className="flex items-center w-full bg-surface-0 relative z-[100]" style={{ height: 32 }}>
+        {/* Left: screenshot */}
+        <div className="flex items-center h-full pl-1">
+          <button onClick={handleScreenshot} className="titlebar-btn titlebar-btn-accent" title="截图">
+            <Camera size={14} />
+          </button>
+        </div>
+
+        {/* Center: title (draggable) */}
         <div
           data-tauri-drag-region
           className="flex-1 h-full flex items-center justify-center"
@@ -149,16 +163,20 @@ export function MiniWindow() {
             className="text-[12px] select-none pointer-events-none"
             style={{ color: 'var(--titlebar-text)' }}
           >
-            Clipboard Mini
+            CopyBox Mini
           </span>
         </div>
 
+        {/* Right: minimize / switch / close */}
         <div className="flex items-center h-full pr-1">
-          <button onClick={handleScreenshot} className="titlebar-btn" title="截图">
-            <Camera size={14} />
+          <button onClick={() => appWindow.minimize()} className="titlebar-btn" title="最小化">
+            <Minus size={14} />
           </button>
           <button onClick={() => invoke("switch_to_main")} className="titlebar-btn" title="切换到主窗口">
             <Maximize2 size={14} />
+          </button>
+          <button onClick={() => appWindow.close()} className="titlebar-btn hover:bg-red-500/20 hover:text-red-400" title="关闭">
+            <X size={14} />
           </button>
         </div>
       </div>

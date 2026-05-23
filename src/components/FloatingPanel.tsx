@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { SearchBar } from "./SearchBar";
 import { HistoryItem } from "./HistoryItem";
-import { Trash2, Filter, Camera } from "lucide-react";
+import { Trash2, Filter, Camera, RefreshCw } from "lucide-react";
 import type { ClipboardItem, CategoryId } from "../types";
 
 interface Props {
@@ -18,10 +18,12 @@ interface Props {
   onClearImages: () => void;
   onOpenImage: (path: string) => void;
   onDoubleClickText: (item: ClipboardItem) => void;
+  onRefresh: () => void;
 }
 
 function classifyItem(item: ClipboardItem): CategoryId {
   const t = item.content_type;
+  if (t === "compound") return "compound" as CategoryId;
   if (t === "link") return "link";
   if (t === "image") return "image";
   if (t === "file") return "file";
@@ -29,15 +31,36 @@ function classifyItem(item: ClipboardItem): CategoryId {
   return "text";
 }
 
+/// Returns all categories a compound item belongs to
+function compoundCategories(item: ClipboardItem): CategoryId[] {
+  if (item.content_type !== "compound") return [classifyItem(item)];
+  const types: CategoryId[] = [];
+  if (item.children) {
+    for (const child of item.children) {
+      const c = classifyItem(child);
+      if (c !== "compound" && !types.includes(c)) {
+        types.push(c);
+      }
+    }
+  }
+  return types.length > 0 ? types : ["text"];
+}
+
+function itemMatchesCategory(item: ClipboardItem, category: CategoryId): boolean {
+  if (category === "all" || category === "favorite") return true;
+  if (item.content_type !== "compound") return classifyItem(item) === category;
+  return compoundCategories(item).includes(category);
+}
+
 const categoryLabels: Record<CategoryId, string> = {
   all: "全部", text: "文本", link: "链接", image: "图片",
-  file: "文件", code: "代码", favorite: "收藏",
+  file: "文件", code: "代码", favorite: "收藏", compound: "混合",
 };
 
 export function FloatingPanel({
   items, category, selectedId, onSelect, onContextMenu,
   onToggleFavorite, onDelete, onClearAll, onClearOld, onClearImages,
-  onOpenImage, onDoubleClickText,
+  onOpenImage, onDoubleClickText, onRefresh,
 }: Props) {
   const [search, setSearch] = useState("");
   const [showMenu, setShowMenu] = useState(false);
@@ -47,7 +70,7 @@ export function FloatingPanel({
     if (category === "favorite") {
       list = list.filter((i) => i.is_favorite);
     } else if (category !== "all") {
-      list = list.filter((i) => classifyItem(i) === category);
+      list = list.filter((i) => itemMatchesCategory(i, category));
     }
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -66,6 +89,14 @@ export function FloatingPanel({
           </h2>
           <div className="flex items-center gap-1">
             <span className="text-xs text-zinc-500 tabular-nums mr-1">{filtered.length} 条</span>
+            {/* Refresh */}
+            <button
+              onClick={onRefresh}
+              className="p-1.5 rounded text-zinc-500 hover:text-zinc-300 hover:bg-surface-2 transition-colors"
+              title="刷新列表"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
             {/* Screenshot */}
             <button
               onClick={async () => {

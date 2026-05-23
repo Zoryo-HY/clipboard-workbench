@@ -102,11 +102,22 @@ export default function App() {
 
   const handleSelect = useCallback(async (item: ClipboardItem) => {
     setSelectedItem(item);
-    try {
-      const content = await invoke<string>("get_full_content", { id: item.id });
-      setFullContent(content);
-    } catch {
-      setFullContent(item.content);
+    if (item.content_type === "compound") {
+      try {
+        const children = await invoke<ClipboardItem[]>("get_children", { parentId: item.id });
+        console.log("[handleSelect] compound children:", children.length, children.map(c => c.content_type));
+        setSelectedItem({ ...item, children });
+      } catch (e) {
+        console.error("[handleSelect] get_children failed:", e);
+        setSelectedItem(item);
+      }
+    } else {
+      try {
+        const content = await invoke<string>("get_full_content", { id: item.id });
+        setFullContent(content);
+      } catch {
+        setFullContent(item.content);
+      }
     }
   }, []);
 
@@ -266,6 +277,7 @@ export default function App() {
             onClearImages={handleClearImages}
             onOpenImage={(path) => invoke("open_image", { path })}
             onDoubleClickText={(item) => setViewingText(item)}
+            onRefresh={loadHistory}
           />
         </div>
 

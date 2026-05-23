@@ -26,7 +26,121 @@ fn get_history(state: tauri::State<AppState>, limit: u32, offset: u32) -> Result
 #[tauri::command]
 fn get_full_content(state: tauri::State<AppState>, id: i64) -> Result<String, String> {
     let conn = state.db.lock().map_err(|e| e.to_string())?;
-    db::get_item_content(&conn, id).map_err(|e| e.to_string())
+    let ct = db::get_item_type(&conn, id).map_err(|e| e.to_string())?;
+    if ct == "compound" {
+        // Return the first text child's content
+        let children = db::get_children(&conn, id).map_err(|e| e.to_string())?;
+        let text_child = children.iter().find(|c| c.content_type == "text" || c.content_type == "link" || c.content_type == "code");
+        Ok(text_child.map(|c| c.content.clone()).unwrap_or_default())
+    } else {
+        db::get_item_content(&conn, id).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn get_children(state: tauri::State<AppState>, parent_id: i64) -> Result<Vec<db::ClipboardItem>, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    db::get_children(&conn, parent_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn copy_compound_item(state: tauri::State<AppState>, record_id: i64, item_type: String) -> Result<String, String> {
+    let conn = state.db.lock().map_err(|e| e.to_string())?;
+    let children = db::get_children(&conn, record_id).map_err(|e| e.to_string())?;
+
+    let label = match item_type.as_str() {
+        "text" | "link" | "code" => {
+            // Copy children of exactly this content_type
+            let target_type = item_type.as_str();
+            let matched: Vec<&db::ClipboardItem> = children.iter().filter(|c|
+                c.content_type == target_type
+            ).collect();
+            if !matched.is_empty() {
+                let mut combined = String::new();
+                for (i, c) in matched.iter().enumerate() {
+                    if i > 0 { combined.push_str("\n\n"); }
+                    combined.push_str(&db::get_item_content(&conn, c.id).map_err(|e| e.to_string())?);
+                }
+                let mut hasher = Sha256::new();
+                hasher.update(combined.as_bytes());
+                let hash = format!("{:x}", hasher.finalize());
+                let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+                cb.set_text(&combined).map_err(|e| e.to_string())?;
+                let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
+                *lw = (hash, Instant::now());
+                match target_type {
+                    "text" => "文本",
+                    "link" => "链接",
+                    "code" => "代码",
+                    _ => "文本",
+                }.to_string()
+            } else {
+                return Err(format!("无{}内容", match target_type {
+                    "text" => "文本", "link" => "链接", "code" => "代码", _ => "文本",
+                }));
+            }
+        }
+        "image" => {
+            let img_child = children.iter().find(|c| c.content_type == "image");
+            if let Some(c) = img_child {
+                let path = db::get_item_content(&conn, c.id).map_err(|e| e.to_string())?;
+                let img = image::open(&path).map_err(|e| format!("无法打开图片: {}", e))?;
+                let rgba = img.to_rgba8();
+                let (w, h) = rgba.dimensions();
+                let img_data = arboard::ImageData {
+                    width: w as usize,
+                    height: h as usize,
+                    bytes: rgba.into_raw().into(),
+                };
+                let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+                cb.set_image(img_data).map_err(|e| e.to_string())?;
+                "图片".to_string()
+            } else {
+                return Err("无图片内容".into());
+            }
+        }
+        "file" => {
+            let file_child = children.iter().find(|c| c.content_type == "file");
+            if let Some(c) = file_child {
+                let path = db::get_item_content(&conn, c.id).map_err(|e| e.to_string())?;
+                let mut hasher = Sha256::new();
+                hasher.update(path.as_bytes());
+                let hash = format!("{:x}", hasher.finalize());
+                let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+                cb.set_text(&path).map_err(|e| e.to_string())?;
+                let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
+                *lw = (hash, Instant::now());
+                "文件".to_string()
+            } else {
+                return Err("无文件内容".into());
+            }
+        }
+        "all" => {
+            let mut items: Vec<serde_json::Value> = Vec::new();
+            for c in &children {
+                let ct = &c.content_type;
+                if ct == "image" || ct == "file" {
+                    let full = db::get_item_content(&conn, c.id).map_err(|e| e.to_string())?;
+                    items.push(serde_json::json!({ "type": ct, "path": full }));
+                } else {
+                    let full = db::get_item_content(&conn, c.id).map_err(|e| e.to_string())?;
+                    items.push(serde_json::json!({ "type": ct, "content": full }));
+                }
+            }
+            let json = serde_json::to_string_pretty(&items).map_err(|e| e.to_string())?;
+            let mut hasher = Sha256::new();
+            hasher.update(json.as_bytes());
+            let hash = format!("{:x}", hasher.finalize());
+            let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+            cb.set_text(&json).map_err(|e| e.to_string())?;
+            let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
+            *lw = (hash, Instant::now());
+            "全部".to_string()
+        }
+        _ => return Err(format!("未知类型: {}", item_type)),
+    };
+
+    Ok(label)
 }
 
 #[tauri::command]
@@ -51,7 +165,26 @@ fn copy_to_clipboard(state: tauri::State<AppState>, id: i64) -> Result<(), Strin
         db::get_item_type(&conn, id).map_err(|e| e.to_string())?
     };
 
-    if content_type == "image" {
+    if content_type == "compound" {
+        // Find text child and copy it
+        let text_content = {
+            let conn = state.db.lock().map_err(|e| e.to_string())?;
+            let children = db::get_children(&conn, id).map_err(|e| e.to_string())?;
+            children.iter()
+                .find(|c| c.content_type == "text" || c.content_type == "link" || c.content_type == "code")
+                .map(|c| c.content.clone())
+                .unwrap_or_default()
+        };
+        if !text_content.is_empty() {
+            let mut hasher = Sha256::new();
+            hasher.update(text_content.as_bytes());
+            let hash = format!("{:x}", hasher.finalize());
+            let mut cb = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+            cb.set_text(&text_content).map_err(|e| e.to_string())?;
+            let mut lw = state.last_written.lock().map_err(|e| e.to_string())?;
+            *lw = (hash, Instant::now());
+        }
+    } else if content_type == "image" {
         let path = {
             let conn = state.db.lock().map_err(|e| e.to_string())?;
             db::get_item_content(&conn, id).map_err(|e| e.to_string())?
@@ -91,30 +224,46 @@ fn toggle_favorite(state: tauri::State<AppState>, id: i64) -> Result<bool, Strin
 
 #[tauri::command]
 fn delete_item(state: tauri::State<AppState>, id: i64) -> Result<(), String> {
-    // Get content before deleting (for file cleanup)
-    let (content_type, content) = {
+    // Get dedup info *before* deleting
+    let (combined_hash, content_hash) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        let ct = db::get_item_type(&conn, id).map_err(|e| e.to_string())?;
-        let c = db::get_item_content(&conn, id).map_err(|e| e.to_string())?;
-        (ct, c)
+        let ch: Option<String> = conn.query_row(
+            "SELECT combined_hash FROM clipboard_items WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        ).unwrap_or(None);
+        let content_hash_val: String = conn.query_row(
+            "SELECT content_hash FROM clipboard_items WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        ).unwrap_or_default();
+        (ch, content_hash_val)
     };
 
-    // Delete from DB
-    {
+    // Delete from DB (returns image file paths to clean up)
+    let paths = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::delete_item(&conn, id).map_err(|e| e.to_string())?;
+        db::delete_item(&conn, id).map_err(|e| e.to_string())?
+    };
+
+    for path in &paths {
+        let _ = std::fs::remove_file(path);
     }
 
-    // Only delete image files (copies created by the app).
-    // "file" type entries point to original user files — must not touch them.
-    if content_type == "image" {
-        let _ = std::fs::remove_file(&content);
-    }
+    // Set last_hash matching what the monitor checks for dedup
+    let hash = if let Some(ch) = combined_hash {
+        // Compound: use combined_hash that monitor compares against
+        ch
+    } else if !content_hash.is_empty() {
+        // Standalone: use the actual content_hash from DB (matches monitor's hash)
+        content_hash
+    } else {
+        // Fallback: hash by id
+        let mut hasher = Sha256::new();
+        hasher.update(id.to_string().as_bytes());
+        format!("{:x}", hasher.finalize())
+    };
 
-    // Set last_hash to deleted content so monitor skips it
-    let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
-    let hash = format!("{:x}", hasher.finalize());
     if let Ok(mut lw) = state.last_written.lock() {
         *lw = (hash.clone(), Instant::now());
     }
@@ -149,10 +298,8 @@ fn clear_cache(state: tauri::State<AppState>) -> Result<String, String> {
     let mut total_freed: u64 = 0;
     let images_dir = state.data_dir.join("images");
 
-    // Delete image files not referenced by any DB record
     if images_dir.exists() {
         if let Ok(conn) = state.db.lock() {
-            // Get all image paths currently in DB
             let mut stmt = conn.prepare(
                 "SELECT content FROM clipboard_items WHERE content_type = 'image'"
             ).map_err(|e| e.to_string())?;
@@ -161,7 +308,6 @@ fn clear_cache(state: tauri::State<AppState>) -> Result<String, String> {
                 .filter_map(|r| r.ok())
                 .collect();
 
-            // Scan images directory for orphans
             if let Ok(entries) = std::fs::read_dir(&images_dir) {
                 for entry in entries.flatten() {
                     let path = entry.path();
@@ -363,34 +509,39 @@ fn toggle_active_window(state: tauri::State<AppState>, app: tauri::AppHandle) ->
 
 #[tauri::command]
 fn clear_item(state: tauri::State<AppState>, app: tauri::AppHandle, id: i64) -> Result<(), String> {
-    // Get content before clearing so we can compute hash
-    let content = {
+    // Get combined_hash *before* clearing, for dedup
+    let combined_hash: Option<String> = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::get_item_content(&conn, id).map_err(|e| e.to_string())?
+        conn.query_row(
+            "SELECT combined_hash FROM clipboard_items WHERE id = ?1",
+            rusqlite::params![id],
+            |row| row.get(0),
+        ).unwrap_or(None)
     };
-    let deleted_file = {
+
+    let (paths, item) = {
         let conn = state.db.lock().map_err(|e| e.to_string())?;
         db::clear_item(&conn, id).map_err(|e| e.to_string())?
     };
-    if let Some(path) = deleted_file {
-        let _ = std::fs::remove_file(&path);
+    for path in &paths {
+        let _ = std::fs::remove_file(path);
         eprintln!("[clear_item] deleted cached file: {}", path);
     }
-    // Set last_hash to cleared content so monitor skips it
-    let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
-    let hash = format!("{:x}", hasher.finalize());
+    // Set last_hash so monitor skips re-detection
+    let hash = if let Some(ch) = combined_hash {
+        format!("clear_{}", ch)
+    } else {
+        format!("clear_{}", id)
+    };
     if let Ok(mut lw) = state.last_written.lock() {
         *lw = (hash.clone(), Instant::now());
     }
     if let Ok(mut lh) = state.last_hash.lock() {
         *lh = hash;
     }
-    let item = {
-        let conn = state.db.lock().map_err(|e| e.to_string())?;
-        db::get_item_by_id(&conn, id).map_err(|e| e.to_string())?
-    };
-    let _ = app.emit("item-cleared", item);
+    if let Some(ref item) = item {
+        let _ = app.emit("item-cleared", item);
+    }
     eprintln!("[clear_item] id={} cleared", id);
     Ok(())
 }
@@ -518,6 +669,7 @@ fn set_auto_start(enable: bool, state: tauri::State<AppState>) -> Result<bool, S
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -660,6 +812,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_history,
             get_full_content,
+            get_children,
+            copy_compound_item,
             write_to_clipboard,
             copy_to_clipboard,
             toggle_favorite,

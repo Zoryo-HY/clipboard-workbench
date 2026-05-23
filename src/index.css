@@ -310,6 +310,13 @@ input[type='range']::-webkit-slider-thumb {
   background: var(--bg-hover-strong);
   color: var(--titlebar-text-hover);
 }
+.titlebar-btn-accent {
+  color: var(--accent-text);
+}
+.titlebar-btn-accent:hover {
+  background: var(--accent-bg-hover);
+  color: var(--accent-text);
+}
 .titlebar-btn-close:hover {
   background: #e81123;
   color: #fff;

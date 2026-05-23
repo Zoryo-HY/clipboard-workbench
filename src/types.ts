@@ -1,7 +1,8 @@
-export type CategoryId = 'all' | 'text' | 'link' | 'image' | 'file' | 'code' | 'favorite';
+export type CategoryId = 'all' | 'text' | 'link' | 'image' | 'file' | 'code' | 'favorite' | 'compound';
 
 export interface ClipboardItem {
   id: number;
+  parent_id?: number | null;
   content_type: string;
   content: string;
   thumbnail?: string;
@@ -9,6 +10,8 @@ export interface ClipboardItem {
   is_favorite: boolean;
   is_cleared: boolean;
   created_at: string;
+  combined_hash?: string | null;
+  children?: ClipboardItem[];
 }
 
 export interface Settings {

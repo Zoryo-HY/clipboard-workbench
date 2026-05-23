@@ -235,6 +235,44 @@ graph TD
 
 ---
 
+### 难点 2.1：迷你窗口 WebView 延迟创建导致事件丢失
+
+**问题现象**
+
+用户在应用启动后立刻复制内容，然后按快捷键切出迷你窗口——新复制的内容没有出现在迷你窗口列表中。但关闭再重新打开迷你窗口后，内容又恢复正常。
+
+**根本原因**
+
+Tauri 多窗口架构下，迷你窗口的 WebView 实例不是应用启动时就创建的，而是在**首次调用 `switch_to_mini` 时按需创建**。这意味着：
+
+- 迷你窗口的 `listen('clipboard-changed', ...)` 注册发生在 WebView 创建时
+- 如果用户在迷你窗口首次打开**之前**已经复制了内容，那些 `clipboard-changed` 事件已经由后端发出
+- 迷你窗口的 `listen()` 注册晚于事件发出，错过了这些事件，且不会自动补发
+
+**解决方案**
+
+在迷你窗口的 `focus` 事件中增加 `loadItems()` 兜底刷新（`MiniWindow.tsx:68`）：
+
+```typescript
+// Sync theme + data whenever window gains focus (belt-and-suspenders)
+const onFocus = () => { syncTheme(); loadItems(); };
+window.addEventListener('focus', onFocus);
+```
+
+**工作原理**：
+
+- 正常场景：`clipboard-changed` 事件实时推送 → 前端增量更新（主路径）
+- 兜底场景：窗口获得焦点 → `loadItems()` 全量拉取数据库最新列表（弥补事件丢失）
+- `focus` 事件每次窗口显示时触发，覆盖了 WebView 延迟创建、窗口从隐藏恢复、切换窗口等所有丢失事件的场景
+
+**最终效果**
+
+- 无论迷你窗口何时首次打开，都能看到最新的剪贴板历史
+- 全量刷新仅在焦点事件时触发，正常增量更新路径不受影响
+- 两个窗口的数据一致性得到双重保障
+
+---
+
 ### 难点 3：无边框窗口拖动与窗口控制
 
 **问题现象**

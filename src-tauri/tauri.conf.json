@@ -49,5 +49,17 @@
     "security": {
       "csp": null
     }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/2464493286/clipboard-workbench/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNERjJGRTEyRjE5M0IwN0QKUldSOXNKUHhFdjd5UFFkdS9QSVMyUVlWQVhTZjhUOUlNSjFIRDZDVnRhMGNaYXM3UVAybUJ0MXcK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

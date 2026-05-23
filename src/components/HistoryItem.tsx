@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, Link, Image, File, Code2, Star, Trash2 } from "lucide-react";
+import { FileText, Link, Image, File, Code2, Star, Trash2, Layers } from "lucide-react";
 import type { ClipboardItem } from "../types";
 
 interface Props {
@@ -19,6 +19,7 @@ const typeConfig: Record<string, { icon: typeof FileText; label: string; accent:
   image:  { icon: Image, label: "图片", accent: "text-emerald-400" },
   file:   { icon: File, label: "文件", accent: "text-amber-400" },
   code:   { icon: Code2, label: "代码", accent: "text-sky-400" },
+  compound: { icon: Layers, label: "混合", accent: "text-rose-400" },
 };
 
 const fileExtIcons: Record<string, string> = {
@@ -58,6 +59,43 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
   const Icon = config.icon;
 
   const renderContent = () => {
+    if (item.content_type === "compound") {
+      return (
+        <div className="flex items-start gap-3">
+          {item.thumbnail ? (
+            <div className="shrink-0 w-14 h-14 rounded overflow-hidden bg-surface-0 border border-subtle relative">
+              {!imgLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+                </div>
+              )}
+              <img
+                src={`data:image/png;base64,${item.thumbnail}`}
+                alt="compound"
+                className={`w-full h-full object-cover ${imgLoaded ? "opacity-100" : "opacity-0"}`}
+                onLoad={() => setImgLoaded(true)}
+              />
+            </div>
+          ) : (
+            <div className={`shrink-0 mt-0.5 w-7 h-7 rounded flex items-center justify-center ${
+              isSelected ? "bg-violet-500/12" : "bg-surface-2"
+            }`}>
+              <Layers className={`w-3.5 h-3.5 ${isSelected ? "text-violet-400" : "text-rose-400"}`} />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-zinc-200 line-clamp-2 break-words font-medium">
+              {item.content}
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs text-zinc-500">{timeAgo(item.created_at)}</span>
+              <span className="text-[11px] text-rose-400">混合内容</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (item.content_type === "image" && item.thumbnail) {
       return (
         <div className="flex items-start gap-3">
@@ -136,6 +174,7 @@ export function HistoryItem({ item, isSelected, onClick, onContextMenu, onToggle
     <div
       onClick={onClick}
       onDoubleClick={() => {
+        if (item.content_type === "compound") return;
         if (item.content_type !== "image") {
           onDoubleClickText?.();
         }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
-import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen, Pencil, Save, Sun, Moon, Zap } from "lucide-react";
+import { check } from "@tauri-apps/plugin-updater";
+import { ArrowLeft, HardDrive, Trash2, Keyboard, Monitor, Play, FolderOpen, Pencil, Save, Sun, Moon, Zap, Download } from "lucide-react";
 import { ShortcutCapture } from "./ShortcutCapture";
 import type { Settings } from "../types";
 
@@ -31,6 +32,9 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
   const [captureOpen, setCaptureOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [cacheMsg, setCacheMsg] = useState("");
+  const [updateChecking, setUpdateChecking] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState("");
+  const [updateDownloading, setUpdateDownloading] = useState(false);
 
   const dirty = useMemo(() => {
     return maxText !== settings.max_text_length
@@ -297,6 +301,49 @@ export function SettingsPanel({ settings, onSave, onBack }: Props) {
             </button>
             {cacheMsg && (
               <p className="text-xs text-emerald-400">{cacheMsg}</p>
+            )}
+          </div>
+        </Section>
+
+        {/* Update */}
+        <Section icon={Download} title="版本更新">
+          <div className="space-y-2">
+            <p className="text-[13px] text-zinc-400">
+              检查并安装最新版本。更新将在下次启动应用时生效。
+            </p>
+            <button
+              onClick={async () => {
+                setUpdateChecking(true);
+                setUpdateStatus("");
+                try {
+                  const update = await check();
+                  if (update) {
+                    setUpdateStatus(`发现新版本 v${update.version}，正在下载...`);
+                    setUpdateDownloading(true);
+                    await update.downloadAndInstall();
+                    setUpdateStatus("更新已下载，重启应用后生效");
+                  } else {
+                    setUpdateStatus("已是最新版本");
+                  }
+                } catch (e) {
+                  setUpdateStatus("检查更新失败: " + e);
+                } finally {
+                  setUpdateChecking(false);
+                  setUpdateDownloading(false);
+                }
+              }}
+              disabled={updateChecking || updateDownloading}
+              className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium
+                text-emerald-400 bg-emerald-500/10 border border-emerald-500/15
+                hover:bg-emerald-500/15 transition-colors disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {updateDownloading ? "下载中..." : updateChecking ? "检查中..." : "检查更新"}
+            </button>
+            {updateStatus && (
+              <p className={`text-xs ${updateStatus.includes("失败") ? "text-red-400" : "text-emerald-400"}`}>
+                {updateStatus}
+              </p>
             )}
           </div>
         </Section>
