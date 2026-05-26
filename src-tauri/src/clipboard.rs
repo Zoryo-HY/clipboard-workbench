@@ -943,14 +943,14 @@ pub fn start_monitoring(
                             });
                         }
                     }
-                    ContentItem::Text { text: _, content_type, hash, preview, size } => {
+                    ContentItem::Text { text, content_type, hash, preview: _, size } => {
                         if hash == *last_hash.lock().unwrap() {
                             eprintln!("[monitor t={}] text: same hash, skip", tick);
                             continue;
                         }
 
                         let (new_id, old_id, _old_content) = match db.lock() {
-                            Ok(conn) => match db::insert_item(&conn, &content_type, &preview, &hash, size, None) {
+                            Ok(conn) => match db::insert_item(&conn, &content_type, &text, &hash, size, None) {
                                 Ok(r) => r,
                                 Err(e) => { eprintln!("[monitor t={}] text: insert_item error: {}", tick, e); (0, None, None) }
                             },
@@ -966,7 +966,7 @@ pub fn start_monitoring(
                                     id: new_id,
                                     parent_id: None,
                                     content_type: content_type.to_string(),
-                                    content: preview,
+                                    content: text,
                                     thumbnail: None,
                                     size,
                                     is_favorite: false,
