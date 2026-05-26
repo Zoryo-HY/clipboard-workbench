@@ -56,7 +56,7 @@
       "endpoints": [
         "https://github.com/Zoryo-HY/clipboard-workbench/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNERjJGRTEyRjE5M0IwN0QKUldSOXNKUHhFdjd5UFFkdS9QSVMyUVlWQVhTZjhUOUlNSjFIRDZDVnRhMGNaYXM3UVAybUJ0MXcK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENFMTU1RDVFQjgwNkZBMDEKUldRQitnYTRYbDBWemhYS1dnSVA2TlIwaDUxdXNVQ1Q3V2tCY0U3YkgwS1d0VXFENlNjQzVLSmgK",
       "windows": {
         "installMode": "passive"
       }
